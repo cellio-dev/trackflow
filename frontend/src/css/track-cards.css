@@ -1,0 +1,1212 @@
+/* Discover track cards + entity cards + status pills (shared across pages). */
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.search-track-card,
+.search-entity-card {
+  position: relative;
+  width: 200px;
+  height: 268px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.14);
+  background: #222;
+  outline: none;
+}
+
+.search-entity-card {
+  cursor: pointer;
+}
+
+.search-track-card__cover,
+.search-entity-card__cover {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  z-index: 0;
+  transition: transform 0.42s cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+.search-track-card:hover .search-track-card__cover,
+.search-entity-card:hover .search-entity-card__cover {
+  transform: scale(1.06);
+}
+
+.search-track-card__image-shade,
+.search-entity-card__image-shade {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background: rgba(0, 0, 0, 0.3);
+  transition: background 0.25s ease;
+}
+
+.search-track-card:hover .search-track-card__image-shade,
+.search-entity-card:hover .search-entity-card__image-shade {
+  background: rgba(0, 0, 0, 0.46);
+}
+
+.search-track-card__text-gradient,
+.search-entity-card__text-gradient {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 52%;
+  z-index: 3;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.88) 0%,
+    rgba(0, 0, 0, 0.5) 52%,
+    transparent 100%
+  );
+}
+
+.search-entity-card--playlist .search-entity-card__image-shade {
+  background: rgba(0, 0, 0, 0.14);
+}
+
+.search-entity-card--playlist:hover .search-entity-card__image-shade {
+  background: rgba(0, 0, 0, 0.34);
+}
+
+.search-entity-card--playlist .search-entity-card__text-gradient {
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.42) 0%,
+    rgba(0, 0, 0, 0.18) 55%,
+    transparent 100%
+  );
+}
+
+.search-track-card__text-band,
+.search-entity-card__text-band {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 10px 12px 8px;
+  z-index: 4;
+  box-sizing: border-box;
+  pointer-events: none;
+  transition: opacity 0.26s ease, visibility 0.26s ease;
+}
+
+/* Top title + artist hidden on hover; bottom panel shows full metadata */
+.search-track-card__text-band--top {
+  pointer-events: none;
+}
+
+.search-track-card:hover .search-track-card__text-band--top,
+.search-track-card:focus-within .search-track-card__text-band--top {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.search-entity-card__title {
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 1.2;
+  margin: 0 0 4px;
+  letter-spacing: 0.01em;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.75);
+  pointer-events: none;
+}
+
+.search-track-card__title {
+  font-weight: 700;
+  font-size: 13px;
+  line-height: 1.2;
+  margin: 0;
+  letter-spacing: 0.01em;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.75);
+  pointer-events: none;
+}
+
+.search-track-card__artist {
+  font-size: 11px;
+  line-height: 1.25;
+  margin-top: 5px;
+  color: rgba(255, 255, 255, 0.72);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.65);
+  pointer-events: none;
+}
+
+.search-track-card__artist .search-card-meta-link {
+  pointer-events: auto;
+  color: inherit;
+  text-decoration: none;
+}
+
+.search-track-card__subtitle,
+.search-entity-card__subtitle {
+  font-size: 11px;
+  line-height: 1.2;
+  margin: 0;
+  color: rgba(255, 255, 255, 0.62);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.65);
+  pointer-events: none;
+}
+
+.search-track-card__subtitle .search-card-meta-link,
+.search-entity-card__subtitle .search-card-meta-link {
+  pointer-events: auto;
+  color: inherit;
+  text-decoration: none;
+}
+
+.search-entity-card--playlist .search-entity-card__subtitle:not(:empty) {
+  opacity: 0;
+  transition: opacity 0.22s ease;
+}
+
+.search-entity-card--playlist:hover .search-entity-card__subtitle:not(:empty) {
+  opacity: 1;
+}
+
+.search-entity-card__follow-strip {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 8px 10px;
+  box-sizing: border-box;
+  background: linear-gradient(
+    to top,
+    rgba(8, 8, 12, 0.94) 0%,
+    rgba(8, 8, 12, 0.55) 65%,
+    transparent 100%
+  );
+  pointer-events: auto;
+}
+
+.search-entity-card__follow-btn {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  max-width: 100%;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(0, 0, 0, 0.4);
+  color: #f4f4f5;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    padding 0.2s ease,
+    min-height 0.2s ease;
+  box-sizing: border-box;
+}
+
+.search-entity-card__follow-icon-slot {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.92);
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.65));
+  transition:
+    opacity 0.2s ease,
+    width 0.2s ease,
+    min-width 0.2s ease;
+}
+
+.search-entity-card__follow-icon-slot:empty {
+  display: none;
+}
+
+.search-entity-card__follow-svg {
+  display: block;
+}
+
+.search-entity-card__follow-label {
+  flex-shrink: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  transition:
+    max-width 0.22s ease,
+    opacity 0.2s ease;
+}
+
+/* Fine pointer: no empty bordered square; icon-only until card hover; in-flow text avoids card clip. */
+@media (hover: hover) {
+  .search-entity-card__follow-btn:not(.is-pending):not(.is-following) {
+    border-color: transparent;
+    background: transparent;
+    padding: 4px 6px;
+    min-height: 0;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .search-entity-card__follow-btn.is-pending,
+  .search-entity-card__follow-btn.is-following {
+    border-color: transparent;
+    background: transparent;
+    padding: 2px 4px;
+    min-height: 0;
+  }
+
+  .search-entity-card__follow-btn.is-pending {
+    color: #fef9c3;
+  }
+
+  .search-entity-card__follow-btn.is-following {
+    color: #dbeafe;
+  }
+
+  .search-entity-card__follow-label {
+    max-width: 0;
+    opacity: 0;
+    margin: 0;
+    pointer-events: none;
+  }
+
+  .search-entity-card:hover .search-entity-card__follow-btn:not(.is-pending):not(.is-following),
+  .search-entity-card:focus-within .search-entity-card__follow-btn:not(.is-pending):not(.is-following),
+  .search-entity-card__follow-btn:not(.is-pending):not(.is-following):focus-visible {
+    opacity: 1;
+    pointer-events: auto;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    background: rgba(0, 0, 0, 0.4);
+    min-height: 32px;
+    padding: 5px 10px;
+  }
+
+  .search-entity-card:hover .search-entity-card__follow-btn:not(.is-pending):not(.is-following) .search-entity-card__follow-label,
+  .search-entity-card:focus-within .search-entity-card__follow-btn:not(.is-pending):not(.is-following) .search-entity-card__follow-label,
+  .search-entity-card__follow-btn:not(.is-pending):not(.is-following):focus-visible .search-entity-card__follow-label {
+    max-width: 140px;
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .search-entity-card:hover .search-entity-card__follow-btn.is-pending,
+  .search-entity-card:hover .search-entity-card__follow-btn.is-following,
+  .search-entity-card:focus-within .search-entity-card__follow-btn.is-pending,
+  .search-entity-card:focus-within .search-entity-card__follow-btn.is-following,
+  .search-entity-card__follow-btn.is-pending:focus-visible,
+  .search-entity-card__follow-btn.is-following:focus-visible {
+    min-height: 32px;
+    padding: 5px 10px;
+  }
+
+  .search-entity-card:hover .search-entity-card__follow-btn.is-pending,
+  .search-entity-card:focus-within .search-entity-card__follow-btn.is-pending,
+  .search-entity-card__follow-btn.is-pending:focus-visible {
+    border-color: rgba(234, 179, 8, 0.45);
+    background: rgba(113, 63, 18, 0.45);
+    color: #fef9c3;
+  }
+
+  .search-entity-card:hover .search-entity-card__follow-btn.is-following,
+  .search-entity-card:focus-within .search-entity-card__follow-btn.is-following,
+  .search-entity-card__follow-btn.is-following:focus-visible {
+    border-color: rgba(59, 130, 246, 0.45);
+    background: rgba(30, 58, 138, 0.45);
+    color: #dbeafe;
+  }
+
+  .search-entity-card:hover .search-entity-card__follow-btn.is-pending .search-entity-card__follow-label,
+  .search-entity-card:hover .search-entity-card__follow-btn.is-following .search-entity-card__follow-label,
+  .search-entity-card:focus-within .search-entity-card__follow-btn.is-pending .search-entity-card__follow-label,
+  .search-entity-card:focus-within .search-entity-card__follow-btn.is-following .search-entity-card__follow-label,
+  .search-entity-card__follow-btn.is-pending:focus-visible .search-entity-card__follow-label,
+  .search-entity-card__follow-btn.is-following:focus-visible .search-entity-card__follow-label {
+    max-width: 140px;
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .search-entity-card:hover .search-entity-card__follow-btn .search-entity-card__follow-icon-slot:not(:empty),
+  .search-entity-card:focus-within .search-entity-card__follow-btn .search-entity-card__follow-icon-slot:not(:empty),
+  .search-entity-card__follow-btn.is-pending:focus-visible .search-entity-card__follow-icon-slot:not(:empty),
+  .search-entity-card__follow-btn.is-following:focus-visible .search-entity-card__follow-icon-slot:not(:empty) {
+    opacity: 0;
+    width: 0;
+    min-width: 0;
+    overflow: hidden;
+    pointer-events: none;
+  }
+}
+
+@media (hover: none) {
+  .search-entity-card__follow-label {
+    max-width: none;
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .search-entity-card__follow-btn.is-following {
+    border-color: rgba(59, 130, 246, 0.45);
+    background: rgba(30, 58, 138, 0.45);
+    color: #dbeafe;
+  }
+
+  .search-entity-card__follow-btn.is-pending {
+    border-color: rgba(234, 179, 8, 0.45);
+    background: rgba(113, 63, 18, 0.45);
+    color: #fef9c3;
+  }
+}
+
+.search-entity-card__follow-btn:not(.is-pending):not(.is-following):hover:not(:disabled) {
+  background: rgba(39, 39, 42, 0.95);
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+@media (hover: hover) {
+  .search-entity-card__follow-btn.is-pending:hover:not(:disabled),
+  .search-entity-card__follow-btn.is-following:hover:not(:disabled) {
+    filter: brightness(1.06);
+  }
+}
+
+.search-entity-card__follow-btn:disabled {
+  opacity: 0.65;
+  cursor: default;
+}
+
+/* My Playlists / My Artists: unfollow strip hidden until hover (fine pointer + hover). */
+.followed-card__follow-strip--reveal {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+@media (hover: hover) {
+  .followed-card__follow-strip--reveal {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.18s ease;
+  }
+
+  .followed-item:hover .followed-card__follow-strip--reveal,
+  .followed-item:focus-within .followed-card__follow-strip--reveal {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* Following page: Plex sync icon must stay visible; strip is not hover-hidden when sync is on */
+  .followed-item .followed-card__follow-strip--reveal.followed-card__follow-strip--plex-always-visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+/* ——— Track card: Seerr-style bottom hover panel ——— */
+
+.search-track-card__hover-panel {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 12px 10px 10px;
+  box-sizing: border-box;
+  pointer-events: none;
+  background: linear-gradient(to top, rgba(8, 8, 12, 0.82) 0%, rgba(8, 8, 12, 0.35) 65%, transparent 100%);
+  transition: background 0.3s ease, padding 0.28s ease;
+}
+
+.search-track-card:hover .search-track-card__hover-panel,
+.search-track-card:focus-within .search-track-card__hover-panel {
+  background: linear-gradient(
+    to top,
+    rgba(6, 6, 10, 0.97) 0%,
+    rgba(10, 10, 16, 0.92) 42%,
+    rgba(10, 10, 16, 0.55) 72%,
+    transparent 100%
+  );
+  padding-top: 20px;
+}
+
+.search-track-card__hover-panel > * {
+  pointer-events: auto;
+}
+
+.search-track-card__hover-details {
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  margin-bottom: 0;
+  transition:
+    max-height 0.32s cubic-bezier(0.33, 1, 0.68, 1),
+    opacity 0.26s ease,
+    margin-bottom 0.26s ease;
+}
+
+.search-track-card:hover .search-track-card__hover-details,
+.search-track-card:focus-within .search-track-card__hover-details {
+  max-height: 140px;
+  opacity: 1;
+  margin-bottom: 10px;
+}
+
+.search-track-card__hover-details-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+}
+
+.search-track-card__hover-line {
+  margin: 0;
+  padding: 0;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.75);
+}
+
+.search-track-card__hover-line--artist {
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.75);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.search-track-card__hover-line--title {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.search-track-card__hover-line--album {
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.78);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+
+.search-track-card__hover-line .search-card-meta-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.search-track-card__hover-actions {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+}
+
+.search-track-card__hover-action-right {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.search-track-card__status-icon-slot {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  color: rgba(255, 255, 255, 0.92);
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.65));
+  transition: opacity 0.22s ease;
+}
+
+.search-track-card__hover-primary-slot {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  max-width: calc(100% - 4px);
+  display: grid;
+  grid-template-columns: minmax(0, max-content);
+  grid-template-rows: 1fr;
+  justify-items: end;
+  align-items: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.22s ease;
+}
+
+.search-track-card__hover-primary-slot > .tf-action-pill {
+  grid-row: 1;
+  grid-column: 1;
+}
+
+.search-track-card:hover .search-track-card__status-icon-slot,
+.search-track-card:focus-within .search-track-card__status-icon-slot,
+.search-track-card__hover-action-right:focus-within .search-track-card__status-icon-slot {
+  opacity: 0;
+}
+
+.search-track-card:hover .search-track-card__hover-primary-slot,
+.search-track-card:focus-within .search-track-card__hover-primary-slot,
+.search-track-card__hover-action-right:focus-within .search-track-card__hover-primary-slot {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.search-track-card__status-svg {
+  display: block;
+}
+
+.search-track-card__status-svg--spin {
+  transform-origin: 12px 12px;
+  animation: tf-card-spin 0.85s linear infinite;
+}
+
+@keyframes tf-card-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Minimal pill actions (hover); both stay in DOM, toggled with hidden */
+.tf-action-pill {
+  flex: 0 1 auto;
+  max-width: 100%;
+  min-height: 0;
+  padding: 5px 11px;
+  border-radius: 999px;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition:
+    opacity 0.2s ease,
+    background 0.18s ease,
+    border-color 0.18s ease;
+}
+
+/* Match .search-entity-card__follow-btn (neutral) — not accent blue */
+.search-track-card__hover-request.tf-action-pill {
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: #f4f4f5;
+  cursor: pointer;
+  background: rgba(0, 0, 0, 0.4);
+  box-shadow: none;
+}
+
+.search-track-card__hover-request.tf-action-pill:hover:not(:disabled) {
+  background: rgba(39, 39, 42, 0.95);
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+.search-track-card__hover-request.tf-action-pill:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.45);
+  outline-offset: 2px;
+}
+
+.search-track-card__hover-status-text.tf-action-pill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.92);
+  text-align: center;
+  background: rgba(30, 30, 36, 0.92);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.25);
+}
+
+.search-track-card__hover-primary-slot > .tf-action-pill.is-off {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.search-track-card__play {
+  position: relative;
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.45);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+  opacity: 0.88;
+  transition:
+    background 0.22s ease,
+    opacity 0.22s ease,
+    transform 0.22s ease,
+    box-shadow 0.22s ease;
+}
+
+.search-track-card__hover-actions > .search-track-card__play {
+  opacity: 0;
+  pointer-events: none;
+  transform: none;
+}
+
+.search-track-card:hover .search-track-card__hover-actions > .search-track-card__play,
+.search-track-card:focus-within .search-track-card__hover-actions > .search-track-card__play,
+.search-track-card__hover-actions > .search-track-card__play:focus-visible {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.62);
+  box-shadow: 0 3px 16px rgba(0, 0, 0, 0.55);
+  transform: scale(1.06);
+  pointer-events: auto;
+}
+
+.search-track-card__hover-actions > .search-track-card__play.is-playing {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.search-track-card__play:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.78);
+}
+
+.search-track-card__play:disabled,
+.search-track-card__play.search-track-card__play--no-preview {
+  cursor: default;
+  opacity: 0.45;
+  transform: none;
+}
+
+.search-track-card__hover-actions > .search-track-card__play:disabled,
+.search-track-card__hover-actions > .search-track-card__play.search-track-card__play--no-preview {
+  opacity: 0;
+  pointer-events: none;
+  transform: none;
+}
+
+.search-track-card:hover .search-track-card__hover-actions > .search-track-card__play:disabled,
+.search-track-card:focus-within .search-track-card__hover-actions > .search-track-card__play:disabled,
+.search-track-card__hover-actions > .search-track-card__play:focus-visible:disabled {
+  opacity: 0.52;
+  transform: none;
+}
+
+.search-track-card__play.is-playing {
+  background: rgba(11, 87, 208, 0.88);
+  opacity: 1;
+  transform: scale(1.06);
+}
+
+.search-track-card__play-svg {
+  display: block;
+  margin-left: 2px;
+}
+
+.search-track-card__play.is-playing .search-track-card__play-svg {
+  margin-left: 0;
+}
+
+.tf-status-badge--on-card {
+  font-size: 11px;
+  padding: 5px 10px;
+  max-width: min(132px, 42vw);
+}
+
+.search-track-card:focus-visible,
+.search-entity-card:focus-visible {
+  outline: 2px solid rgba(96, 165, 250, 0.85);
+  outline-offset: 2px;
+}
+
+/*
+ * Touch / PWA: no hover — keep default (non-hover) card chrome, but expose play + request row.
+ * Avoid forcing expanded hover-details or heavy gradients (reads as “always selected”).
+ */
+@media (hover: none) {
+  .search-track-card:hover .search-track-card__cover,
+  .search-track-card:focus-within .search-track-card__cover {
+    transform: none;
+  }
+
+  .search-track-card:hover .search-track-card__image-shade,
+  .search-track-card:focus-within .search-track-card__image-shade {
+    background: rgba(0, 0, 0, 0.3);
+  }
+
+  /* Keep top title/artist visible (no hover to “reveal” bottom copy). */
+  .search-track-card:hover .search-track-card__text-band--top,
+  .search-track-card:focus-within .search-track-card__text-band--top {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  /* Match desktop :hover action strip: primary + play, hide duplicate status icon row */
+  .search-track-card .search-track-card__status-icon-slot {
+    opacity: 0;
+  }
+
+  .search-track-card .search-track-card__hover-primary-slot {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .search-track-card .search-track-card__hover-actions > .search-track-card__play:not(.search-track-card__play--no-preview):not(:disabled) {
+    opacity: 0.95;
+    pointer-events: auto;
+    transform: none;
+  }
+
+  .search-track-card .search-track-card__hover-actions > .search-track-card__play.is-playing {
+    opacity: 1;
+    pointer-events: auto;
+    transform: scale(1.06);
+  }
+
+  .search-track-card .search-track-card__hover-actions > .search-track-card__play.search-track-card__play--no-preview,
+  .search-track-card .search-track-card__hover-actions > .search-track-card__play:disabled {
+    opacity: 0.38;
+    pointer-events: none;
+    transform: none;
+  }
+
+  /* Let vertical scroll pass through card chrome; buttons still receive taps. */
+  .search-track-card {
+    touch-action: manipulation;
+  }
+
+  /* Search result rows: play + request without requiring hover */
+  .track-row--card-style.track-row--list-requestable .track-row__status-icon-slot {
+    opacity: 0;
+  }
+
+  .track-row--card-style .track-row__hover-primary-slot {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .track-row--card-style .search-track-card__play.track-row__preview:not(:disabled) {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+
+  .track-row--card-style {
+    touch-action: manipulation;
+  }
+}
+
+.tf-status-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid #ddd;
+  background: #f0f0f0;
+  color: #333;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tf-status-badge--on-dark {
+  border-color: rgba(255, 255, 255, 0.35);
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+
+button.tf-status-badge {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+button.tf-status-badge:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.tf-status-badge--action:hover:not(:disabled) {
+  background: rgba(11, 87, 208, 0.9);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+/* Album / artist / playlist: vertical list, card-matched row styling */
+.track-list-vertical {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.track-row.track-row--card-style {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #222;
+  border-radius: 10px;
+  padding: 10px 12px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.14);
+  min-height: 76px;
+  box-sizing: border-box;
+  outline: none;
+  transition: box-shadow 0.22s ease, transform 0.22s ease;
+}
+
+.track-row--card-style:hover,
+.track-row--card-style:focus-within {
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.28);
+  transform: scale(1.01);
+}
+
+.track-row--card-style .track-row__cover {
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 6px;
+  flex-shrink: 0;
+  background: #333;
+}
+
+.track-row--card-style .track-row__meta {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-self: stretch;
+  min-height: 52px;
+}
+
+.track-row__top-meta {
+  transition: opacity 0.24s ease;
+}
+
+.track-row--card-style:hover .track-row__top-meta,
+.track-row--card-style:focus-within .track-row__top-meta {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.track-row__hover-meta {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.24s ease;
+}
+
+.track-row--card-style:hover .track-row__hover-meta,
+.track-row--card-style:focus-within .track-row__hover-meta {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.track-row__hover-details-inner .search-track-card__hover-line--artist {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.track-row__hover-details-inner .search-track-card__hover-line--title {
+  font-size: 15px;
+}
+
+.track-row__hover-details-inner .search-track-card__hover-line--album {
+  -webkit-line-clamp: 2;
+}
+
+.track-row--card-style .track-row__title {
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 1.2;
+  margin: 0;
+  letter-spacing: 0.01em;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow:
+    0 0 1px rgba(0, 0, 0, 1),
+    0 1px 2px rgba(0, 0, 0, 0.95),
+    0 2px 12px rgba(0, 0, 0, 0.55);
+}
+
+.track-row--card-style .track-row__artist {
+  font-size: 11px;
+  line-height: 1.25;
+  margin-top: 4px;
+  color: rgba(255, 255, 255, 0.72);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.track-row--card-style .track-row__artist .track-artist-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.track-row--card-style .track-row__artist .track-artist-link:hover {
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.track-row--card-style .track-row__action-bar {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-shrink: 0;
+  margin-left: auto;
+  min-width: 0;
+  pointer-events: none;
+}
+
+.track-row--card-style .track-row__action-bar .search-track-card__play,
+.track-row--card-style .track-row__action-bar .track-row__hover-action-right {
+  pointer-events: auto;
+}
+
+.track-row--card-style .track-row__hover-action-right {
+  position: relative;
+  min-height: 36px;
+  min-width: 36px;
+  flex: 1;
+  max-width: min(220px, 46vw);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.track-row--card-style .track-row__status-icon-slot {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  color: rgba(255, 255, 255, 0.92);
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
+  transition: opacity 0.22s ease;
+}
+
+.track-row--card-style .track-row__hover-primary-slot {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  max-width: calc(100% - 4px);
+  display: grid;
+  grid-template-columns: minmax(0, max-content);
+  justify-items: end;
+  align-items: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.22s ease;
+}
+
+.track-row--card-style .track-row__hover-primary-slot > .tf-action-pill {
+  grid-row: 1;
+  grid-column: 1;
+}
+
+.track-row--card-style .track-row__hover-primary-slot > .tf-action-pill.is-off {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* Icon-only status: keep visible on hover unless + request control is shown */
+.track-row--card-style.track-row--list-requestable:hover .track-row__status-icon-slot,
+.track-row--card-style.track-row--list-requestable:focus-within .track-row__status-icon-slot,
+.track-row--card-style.track-row--list-requestable
+  .track-row__hover-action-right:focus-within
+  .track-row__status-icon-slot {
+  opacity: 0;
+}
+
+.track-row--card-style.track-row--list-requestable:hover .track-row__hover-primary-slot,
+.track-row--card-style.track-row--list-requestable:focus-within .track-row__hover-primary-slot,
+.track-row--card-style.track-row--list-requestable
+  .track-row__hover-action-right:focus-within
+  .track-row__hover-primary-slot {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Match .track-row__status-icon-slot treatment (same as Requested / Available / etc.) */
+.track-row--card-style .track-row__add-request-btn.tf-action-pill {
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0;
+  color: rgba(255, 255, 255, 0.92);
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 0;
+}
+
+.track-row--card-style .track-row__add-request-btn.tf-action-pill:hover:not(:disabled) {
+  background: transparent;
+  border-color: transparent;
+  color: #fff;
+  box-shadow: none;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55));
+}
+
+.track-row--card-style .track-row__add-request-btn.tf-action-pill:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.45);
+  outline-offset: 2px;
+}
+
+.track-row--card-style .track-row__add-request-btn.tf-action-pill:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.track-row--card-style .track-row__add-request-icon {
+  display: block;
+}
+
+.track-row__status-svg {
+  display: block;
+}
+
+.track-row__status-svg--spin {
+  transform-origin: 12px 12px;
+  animation: tf-card-spin 0.85s linear infinite;
+}
+
+.track-row--card-style .search-track-card__play.track-row__preview {
+  position: static;
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+}
+
+.track-row--card-style:hover .search-track-card__play.track-row__preview:not(:disabled),
+.track-row--card-style:focus-within .search-track-card__play.track-row__preview:not(:disabled) {
+  opacity: 1;
+  transform: scale(1.06);
+}
+
+.track-list-vertical > .track-list-empty {
+  padding: 12px 0;
+  font-size: 14px;
+  color: #555;
+}
+
+/* Album page: keep title + artist fixed; no swap to expanded hover metadata (avoids duplicate album line). */
+.track-list-vertical.tf-freeze-row-meta .track-row--card-style:hover .track-row__top-meta,
+.track-list-vertical.tf-freeze-row-meta .track-row--card-style:focus-within .track-row__top-meta {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.track-list-vertical.tf-freeze-row-meta .track-row__hover-meta {
+  display: none;
+}
+
+.track-list-vertical.tf-freeze-row-meta .track-row--card-style .track-row__artist .track-artist-link:hover {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+/* Artist / playlist (and album frozen rows): hover-panel links match body text, no accent hover. */
+.track-list-vertical.tf-neutral-hover-links .track-row__hover-details-inner .track-artist-link,
+.track-list-vertical.tf-neutral-hover-links .track-row__hover-details-inner .track-album-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.track-list-vertical.tf-neutral-hover-links .track-row__hover-details-inner .track-artist-link:hover,
+.track-list-vertical.tf-neutral-hover-links .track-row__hover-details-inner .track-album-link:hover {
+  color: inherit;
+}
+
+/* Plex sync on entity cards (Discover + Following grid): left side of follow strip */
+.search-entity-card__follow-strip--has-plex-sync {
+  justify-content: space-between;
+}
+
+.search-entity-card__plex-sync-slot {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  pointer-events: none;
+  color: transparent;
+}
+
+.search-entity-card__plex-sync-slot .search-entity-card__plex-sync-svg {
+  display: block;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.65));
+}

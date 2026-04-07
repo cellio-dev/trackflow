@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+
+# Environment / local secrets (backend loads backend/.env)
+.env
+.env.local
+.env.*.local
+
+# Vite build output
+frontend/dist/
+
+# SQLite (runtime DB + WAL mode sidecars)
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.idea/

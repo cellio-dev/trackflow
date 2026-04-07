@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="en" class="app-layout">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0A0E17" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/icons/icon-512.png" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" sizes="180x180" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" sizes="192x192" />
+    <meta name="apple-mobile-web-app-title" content="TrackFlow" />
+    <link rel="stylesheet" href="/src/css/app-shell.css" />
+    <title>TrackFlow Requests</title>
+    <style>
+      .container {
+        box-sizing: border-box;
+        width: 100%;
+        margin: 0;
+        padding: 24px 16px 32px;
+      }
+
+      @media (min-width: 640px) {
+        .container {
+          padding-left: 24px;
+          padding-right: 24px;
+        }
+      }
+
+      @media (min-width: 1024px) {
+        .container {
+          padding-left: 32px;
+          padding-right: 32px;
+        }
+      }
+
+      body:not(.admin-view) .admin-only {
+        display: none;
+      }
+
+      body.admin-view .follow-requests-hint--self {
+        display: none;
+      }
+
+      .follow-requests-section {
+        margin-bottom: 28px;
+      }
+
+      .follow-requests-heading {
+        margin: 0 0 8px;
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: #333;
+      }
+
+      .follow-requests-hint {
+        margin: 0 0 12px;
+        font-size: 13px;
+        color: #555;
+        max-width: 640px;
+        line-height: 1.4;
+      }
+
+      .follow-requests-table {
+        min-width: 520px;
+      }
+
+      .track-requests-section {
+        margin-top: 24px;
+      }
+
+      .request-history-section {
+        margin-top: 32px;
+      }
+
+      .requests-table-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px 16px;
+        margin: 12px 0 16px;
+      }
+
+      .requests-status-filter-label {
+        font-size: 14px;
+        font-weight: 600;
+        color: #333;
+      }
+
+      .requests-status-filter {
+        min-width: 200px;
+        padding: 8px 10px;
+        font-size: 14px;
+        border: 1px solid #ccc;
+        border-radius: 6px;
+        background: #fff;
+      }
+
+      .requests-table-wrap {
+        overflow-x: auto;
+        margin-bottom: 24px;
+      }
+
+      .requests-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+        min-width: 980px;
+      }
+
+      .requests-table th,
+      .requests-table td {
+        border: 1px solid #ddd;
+        padding: 8px 10px;
+        text-align: left;
+        vertical-align: middle;
+      }
+
+      .requests-table th {
+        background: #f5f5f5;
+        font-weight: 600;
+      }
+
+      .requests-table th.requests-th-sortable {
+        padding: 0;
+        vertical-align: bottom;
+      }
+
+      .requests-sort-btn {
+        width: 100%;
+        margin: 0;
+        padding: 10px 10px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        font: inherit;
+        font-weight: 600;
+        text-align: left;
+        border: none;
+        background: transparent;
+        color: inherit;
+        cursor: pointer;
+        box-sizing: border-box;
+      }
+
+      .requests-sort-btn:hover {
+        background: rgba(0, 0, 0, 0.04);
+      }
+
+      .requests-sort-btn:focus-visible {
+        outline: 2px solid #0b57d0;
+        outline-offset: -2px;
+      }
+
+      .sort-indicator {
+        flex-shrink: 0;
+        font-size: 11px;
+        opacity: 0.45;
+        font-weight: 700;
+        min-width: 1em;
+        text-align: center;
+      }
+
+      .requests-sort-btn.is-active .sort-indicator {
+        opacity: 1;
+        color: #0b57d0;
+      }
+
+      .requests-table tbody tr:nth-child(even) {
+        background: #fafafa;
+      }
+
+      .bulk-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+        margin: 12px 0 20px;
+      }
+
+      .bulk-actions button {
+        padding: 6px 12px;
+        font-size: 13px;
+        cursor: pointer;
+      }
+
+      .bulk-actions button:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
+
+      #bulkSummary {
+        margin: 0;
+        width: 100%;
+        font-size: 13px;
+        color: #333;
+        min-height: 1.2em;
+      }
+
+      .bulk-inline-summary.is-error {
+        color: #b3261e;
+      }
+
+      .bulk-inline-summary.is-success {
+        color: #1b5e20;
+      }
+    </style>
+  </head>
+  <body class="app-layout">
+    <div class="app-shell">
+      <aside class="app-sidebar" aria-label="Main navigation">
+        <a href="/index.html" class="app-sidebar__brand" aria-label="TrackFlow home">
+          <img class="app-sidebar__logo" src="/trackflow-logo.svg" width="384" height="60" alt="" decoding="async" />
+        </a>
+        <nav class="app-sidebar__nav">
+          <a href="/index.html" class="app-nav-item" aria-label="Discover">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            <span class="app-nav-item__label">Discover</span>
+          </a>
+          <a href="/following.html" class="app-nav-item" aria-label="Following">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>
+            <span class="app-nav-item__label">Following</span>
+          </a>
+          <a href="/requests.html" class="app-nav-item app-nav-item--active" aria-current="page" aria-label="Requests">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M15 2H9a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V3a1 1 0 0 0-1-1z"/><path d="M9 12h6"/><path d="M9 16h6"/></svg>
+            <span class="app-nav-item__label">Requests</span>
+          </a>
+          <a href="/jukebox.html" class="app-nav-item" aria-label="Jukebox">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
+            <span class="app-nav-item__label">Jukebox</span>
+          </a>
+          <a href="/settings.html" class="app-nav-item" aria-label="Settings" hidden>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+            <span class="app-nav-item__label">Settings</span>
+          </a>
+        </nav>
+      </aside>
+      <main class="app-main">
+        <div class="container">
+          <div class="search-row" data-app-top-search>
+            <div class="search-field">
+              <span class="search-field__icon" aria-hidden="true">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+              </span>
+              <input type="text" placeholder="Search artists, albums, tracks &amp; playlists" aria-label="Search" />
+            </div>
+          </div>
+          <h1>Requests</h1>
+
+          <section class="follow-requests-section" aria-labelledby="followRequestsHeading">
+            <h2 id="followRequestsHeading" class="follow-requests-heading">Follow requests</h2>
+            <div class="bulk-actions admin-only" id="followBulkActionsBar">
+              <button type="button" id="followApproveAllBtn">Approve All</button>
+              <button type="button" id="followDenyAllBtn">Deny All</button>
+              <p id="followBulkSummary" class="bulk-inline-summary" aria-live="polite"></p>
+            </div>
+            <p class="follow-requests-hint follow-requests-hint--self">
+              Playlist or artist follows you requested that are still waiting for an administrator to approve.
+            </p>
+            <div class="requests-table-toolbar">
+              <label class="requests-status-filter-label" for="followTypeFilter">Show</label>
+              <select id="followTypeFilter" class="requests-status-filter" aria-label="Filter follow requests">
+                <option value="">All</option>
+                <option value="playlist">Playlists only</option>
+                <option value="artist">Artists only</option>
+              </select>
+            </div>
+            <div class="requests-table-wrap">
+              <table class="requests-table follow-requests-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Type</th>
+                    <th scope="col">Title</th>
+                    <th scope="col" class="admin-only">User</th>
+                    <th scope="col">Requested</th>
+                    <th scope="col">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="followRequestsBody"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="track-requests-section" aria-labelledby="trackRequestsHeading">
+            <h2 id="trackRequestsHeading" class="follow-requests-heading">Track requests</h2>
+            <div class="bulk-actions admin-only" id="trackBulkActionsBar">
+              <button type="button" id="approveAllBtn">Approve All</button>
+              <button type="button" id="denyAllBtn">Deny All</button>
+              <button type="button" id="cancelAllBtn">Cancel All</button>
+              <button type="button" id="retryFailedBtn">Retry Failed</button>
+              <p id="trackBulkSummary" class="bulk-inline-summary" aria-live="polite"></p>
+            </div>
+            <div class="requests-table-toolbar">
+            <label class="requests-status-filter-label" for="statusFilter">Status</label>
+            <select id="statusFilter" class="requests-status-filter" aria-label="Filter active requests by status">
+              <option value="">All active</option>
+              <option value="pending">Pending</option>
+              <option value="requested">Requested</option>
+              <option value="processing">Processing</option>
+              <option value="failed">Failed (needs attention)</option>
+            </select>
+            </div>
+
+            <div class="requests-table-wrap">
+            <table class="requests-table">
+              <thead>
+                <tr>
+                  <th scope="col" class="requests-th-sortable">
+                    <button type="button" class="requests-sort-btn" data-sort="title">
+                      Title <span class="sort-indicator" aria-hidden="true"></span>
+                    </button>
+                  </th>
+                  <th scope="col" class="requests-th-sortable">
+                    <button type="button" class="requests-sort-btn" data-sort="artist">
+                      Artist <span class="sort-indicator" aria-hidden="true"></span>
+                    </button>
+                  </th>
+                  <th scope="col" class="requests-th-sortable">
+                    <button type="button" class="requests-sort-btn" data-sort="album">
+                      Album <span class="sort-indicator" aria-hidden="true"></span>
+                    </button>
+                  </th>
+                  <th scope="col" class="admin-only requests-th-sortable">
+                    <button type="button" class="requests-sort-btn" data-sort="user">
+                      User <span class="sort-indicator" aria-hidden="true"></span>
+                    </button>
+                  </th>
+                  <th scope="col" class="requests-th-sortable">
+                    <button type="button" class="requests-sort-btn" data-sort="source">
+                      Source <span class="sort-indicator" aria-hidden="true"></span>
+                    </button>
+                  </th>
+                  <th scope="col" class="requests-th-sortable">
+                    <button type="button" class="requests-sort-btn" data-sort="requested">
+                      Requested <span class="sort-indicator" aria-hidden="true"></span>
+                    </button>
+                  </th>
+                  <th scope="col" class="requests-th-sortable">
+                    <button type="button" class="requests-sort-btn" data-sort="status">
+                      Status <span class="sort-indicator" aria-hidden="true"></span>
+                    </button>
+                  </th>
+                  <th scope="col" class="admin-only requests-th-sortable">
+                    <button type="button" class="requests-sort-btn" data-sort="processing">
+                      Processing status <span class="sort-indicator" aria-hidden="true"></span>
+                    </button>
+                  </th>
+                  <th scope="col">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="requestsBody"></tbody>
+            </table>
+            </div>
+          </section>
+
+          <section class="request-history-section admin-only" aria-labelledby="requestHistoryHeading">
+            <h2 id="requestHistoryHeading" class="follow-requests-heading">Request history</h2>
+            <div class="bulk-actions" id="historyBulkActionsBar">
+              <button type="button" id="clearHistoryBtn">Clear All</button>
+              <button type="button" class="history-status-clear-btn" data-track-status="completed">Clear Completed</button>
+              <button type="button" class="history-status-clear-btn" data-track-status="denied">Clear Denied</button>
+              <button type="button" class="history-status-clear-btn" data-track-status="available">Clear Available</button>
+              <button type="button" class="history-status-clear-btn" data-track-status="cancelled">
+                Clear Cancelled
+              </button>
+              <button type="button" class="history-follow-clear-btn" data-follow-outcome="approved">
+                Clear Follow Approved
+              </button>
+              <button type="button" class="history-follow-clear-btn" data-follow-outcome="denied">
+                Clear Follow Denied
+              </button>
+              <p id="historyBulkSummary" class="bulk-inline-summary" aria-live="polite"></p>
+            </div>
+            <div class="requests-table-toolbar">
+              <label class="requests-status-filter-label" for="historyTypeFilter">Show</label>
+              <select id="historyTypeFilter" class="requests-status-filter" aria-label="Filter request history">
+                <option value="">All history</option>
+                <option value="track">Tracks only</option>
+                <option value="follow">Follows only</option>
+              </select>
+            </div>
+            <div class="requests-table-wrap">
+            <table class="requests-table requests-history-table">
+              <thead>
+                <tr>
+                  <th scope="col" class="requests-th-sortable">
+                    <button type="button" class="requests-sort-btn" data-history-sort="type">
+                      Type <span class="sort-indicator" aria-hidden="true"></span>
+                    </button>
+                  </th>
+                  <th scope="col" class="requests-th-sortable">
+                    <button type="button" class="requests-sort-btn" data-history-sort="title">
+                      Title <span class="sort-indicator" aria-hidden="true"></span>
+                    </button>
+                  </th>
+                  <th scope="col" class="requests-th-sortable">
+                    <button type="button" class="requests-sort-btn" data-history-sort="artist">
+                      Artist <span class="sort-indicator" aria-hidden="true"></span>
+                    </button>
+                  </th>
+                  <th scope="col" class="requests-th-sortable">
+                    <button type="button" class="requests-sort-btn" data-history-sort="album">
+                      Album <span class="sort-indicator" aria-hidden="true"></span>
+                    </button>
+                  </th>
+                  <th scope="col" class="admin-only requests-th-sortable">
+                    <button type="button" class="requests-sort-btn" data-history-sort="user">
+                      User <span class="sort-indicator" aria-hidden="true"></span>
+                    </button>
+                  </th>
+                  <th scope="col" class="requests-th-sortable">
+                    <button type="button" class="requests-sort-btn" data-history-sort="source">
+                      Source <span class="sort-indicator" aria-hidden="true"></span>
+                    </button>
+                  </th>
+                  <th scope="col" class="requests-th-sortable">
+                    <button type="button" class="requests-sort-btn" data-history-sort="when">
+                      Requested <span class="sort-indicator" aria-hidden="true"></span>
+                    </button>
+                  </th>
+                  <th scope="col" class="requests-th-sortable">
+                    <button type="button" class="requests-sort-btn" data-history-sort="status">
+                      Status <span class="sort-indicator" aria-hidden="true"></span>
+                    </button>
+                  </th>
+                  <th scope="col" class="admin-only requests-th-sortable">
+                    <button type="button" class="requests-sort-btn" data-history-sort="processing">
+                      Processing status <span class="sort-indicator" aria-hidden="true"></span>
+                    </button>
+                  </th>
+                  <th scope="col">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="requestHistoryBody"></tbody>
+            </table>
+            </div>
+          </section>
+        </div>
+      </main>
+    </div>
+
+    <script type="module" src="/src/pages/requests-page.js"></script>
+  </body>
+</html>

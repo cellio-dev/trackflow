@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0A0E17" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/icons/icon-512.png" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" sizes="180x180" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" sizes="192x192" />
+    <meta name="apple-mobile-web-app-title" content="TrackFlow" />
+    <title>Sign in · TrackFlow</title>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        min-height: 100dvh;
+        font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+        background: #000000;
+        color: #e4e4e7;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        box-sizing: border-box;
+      }
+      .login-card {
+        width: 100%;
+        max-width: 380px;
+        background: #18181b;
+        border: 1px solid #27272a;
+        border-radius: 12px;
+        padding: 28px 24px 24px;
+        box-sizing: border-box;
+      }
+      .login-card__logo {
+        display: block;
+        width: 100%;
+        max-width: 280px;
+        height: auto;
+        margin: 0 auto 26px;
+        object-fit: contain;
+      }
+      label {
+        display: block;
+        font-size: 0.8125rem;
+        font-weight: 600;
+        color: #d4d4d8;
+        margin-bottom: 6px;
+      }
+      input[type='text'],
+      input[type='password'] {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 10px 12px;
+        margin-bottom: 16px;
+        font-size: 1rem;
+        border-radius: 8px;
+        border: 1px solid #3f3f46;
+        background: #09090b;
+        color: #fafafa;
+      }
+      input:focus-visible {
+        outline: 2px solid #71717a;
+        outline-offset: 1px;
+      }
+      button[type='submit'] {
+        width: 100%;
+        margin-top: 4px;
+        padding: 10px 14px;
+        font-size: 0.9375rem;
+        font-weight: 600;
+        border: none;
+        border-radius: 8px;
+        background: #fafafa;
+        color: #18181b;
+        cursor: pointer;
+      }
+      button[type='submit']:hover {
+        filter: brightness(1.05);
+      }
+      .login-or {
+        margin: 18px 0 10px;
+        text-align: center;
+        font-size: 0.8125rem;
+        color: #71717a;
+      }
+      .login-plex-btn {
+        width: 100%;
+        padding: 10px 14px;
+        font-size: 0.9375rem;
+        font-weight: 600;
+        border-radius: 8px;
+        border: 1px solid #3f3f46;
+        background: #27272a;
+        color: #e4e4e7;
+        cursor: pointer;
+      }
+      .login-plex-btn:hover:not(:disabled) {
+        background: #3f3f46;
+      }
+      .login-plex-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+      .login-msg {
+        margin: 14px 0 0;
+        font-size: 0.875rem;
+        min-height: 1.25em;
+        color: #a1a1aa;
+      }
+      .login-msg.login-msg--error {
+        color: #f87171;
+      }
+      .login-msg.login-msg--info {
+        color: #a1a1aa;
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+      }
+      .login-msg__spinner {
+        flex-shrink: 0;
+        width: 16px;
+        height: 16px;
+        margin-top: 2px;
+        border: 2px solid #3f3f46;
+        border-top-color: #e4e4e7;
+        border-radius: 50%;
+        animation: login-msg-spin 0.7s linear infinite;
+      }
+      @keyframes login-msg-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      .login-msg__text {
+        flex: 1;
+        line-height: 1.35;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="login-card">
+      <img
+        class="login-card__logo"
+        src="/trackflow-logo.svg"
+        width="384"
+        height="60"
+        alt="TrackFlow"
+        decoding="async"
+      />
+      <form id="loginForm" method="post" action="#">
+        <label for="loginUsername">Username</label>
+        <input id="loginUsername" name="username" type="text" autocomplete="username" required />
+        <label for="loginPassword">Password</label>
+        <input id="loginPassword" name="password" type="password" autocomplete="current-password" required />
+        <button type="submit">Sign in</button>
+      </form>
+      <p id="loginOr" class="login-or" hidden>or</p>
+      <button type="button" id="loginPlexBtn" class="login-plex-btn" hidden>
+        Sign in with Plex
+      </button>
+      <p id="loginMessage" class="login-msg" aria-live="polite"></p>
+    </div>
+    <script type="module" src="/src/pages/login-page.js"></script>
+  </body>
+</html>

@@ -1,0 +1,894 @@
+<!doctype html>
+<html lang="en" class="app-layout">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0A0E17" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/icons/icon-512.png" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" sizes="180x180" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" sizes="192x192" />
+    <meta name="apple-mobile-web-app-title" content="TrackFlow" />
+    <link rel="stylesheet" href="/src/css/app-shell.css" />
+    <title>TrackFlow Settings</title>
+    <style>
+      .container {
+        box-sizing: border-box;
+        width: 100%;
+        margin: 0;
+        padding: 24px 16px 32px;
+      }
+
+      @media (min-width: 640px) {
+        .container {
+          padding-left: 24px;
+          padding-right: 24px;
+        }
+      }
+
+      @media (min-width: 1024px) {
+        .container {
+          padding-left: 32px;
+          padding-right: 32px;
+        }
+      }
+
+      .setting-row {
+        margin-top: 16px;
+      }
+
+      .setting-row label.block-label {
+        display: block;
+        font-weight: 600;
+        margin-bottom: 6px;
+      }
+
+      .setting-row select,
+      .setting-row input[type='number'],
+      .setting-row input[type='text'],
+      .setting-row input[type='password'] {
+        min-width: 220px;
+        padding: 6px 8px;
+        font-size: 14px;
+      }
+
+      .setting-row input.integration-wide {
+        width: 100%;
+        max-width: 520px;
+        box-sizing: border-box;
+      }
+
+      .setting-inline-input-save {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px;
+        width: 100%;
+        max-width: 520px;
+      }
+
+      .setting-inline-input-save > input[type='text'] {
+        flex: 1 1 200px;
+        min-width: 0;
+        box-sizing: border-box;
+      }
+
+      .setting-hint {
+        margin: 4px 0 0;
+        font-size: 13px;
+        color: #555;
+        max-width: 520px;
+        line-height: 1.4;
+      }
+
+      .setting-hint--warning {
+        color: #d97706;
+        font-weight: 500;
+      }
+
+      .setting-sub {
+        margin-left: 1.5rem;
+      }
+
+      .file-naming-input {
+        display: block;
+        width: 100%;
+        max-width: 560px;
+        box-sizing: border-box;
+        padding: 8px 10px;
+        font-size: 14px;
+        font-family: ui-monospace, 'Cascadia Code', 'Segoe UI Mono', monospace;
+      }
+
+      .file-naming-sample {
+        color: #71717a;
+        font-size: 12px;
+      }
+
+      .file-naming-preview {
+        margin: 8px 0 0;
+        font-size: 13px;
+        color: #a1a1aa;
+        word-break: break-all;
+        max-width: 560px;
+      }
+
+      .file-naming-preview.is-ok {
+        color: #86efac;
+      }
+
+      .file-naming-error {
+        margin: 8px 0 0;
+        font-size: 13px;
+        color: #fca5a5;
+        max-width: 560px;
+      }
+
+      .settings-tabs {
+        display: flex;
+        gap: 4px;
+        margin: 16px 0 20px;
+        border-bottom: 1px solid #3f3f46;
+        padding-bottom: 0;
+      }
+
+      .settings-tab {
+        padding: 10px 16px;
+        font: inherit;
+        font-size: 14px;
+        font-weight: 600;
+        border: none;
+        border-bottom: 2px solid transparent;
+        margin-bottom: -1px;
+        background: transparent;
+        color: #a1a1aa;
+        cursor: pointer;
+        border-radius: 6px 6px 0 0;
+      }
+
+      .settings-tab:hover {
+        color: #e4e4e7;
+        background: rgba(255, 255, 255, 0.04);
+      }
+
+      .settings-tab.is-active {
+        color: #fafafa;
+        border-bottom-color: #3b82f6;
+      }
+
+      .settings-panel-title {
+        margin: 0 0 12px;
+        font-size: 1.1rem;
+        font-weight: 600;
+      }
+
+      .settings-users-table {
+        width: 100%;
+        max-width: 720px;
+        border-collapse: collapse;
+        font-size: 14px;
+        margin-top: 12px;
+      }
+
+      .settings-users-table th,
+      .settings-users-table td {
+        border: 1px solid #3f3f46;
+        padding: 8px 10px;
+        text-align: left;
+      }
+
+      .settings-users-table th {
+        background: #27272a;
+        font-weight: 600;
+      }
+
+      .settings-users-table td.settings-users-actions {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .settings-users-table .users-password-editor {
+        display: none;
+        flex-wrap: nowrap;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .settings-users-table .users-password-editor.is-open {
+        display: inline-flex;
+      }
+
+      .settings-users-table .users-password-editor input[type='password'] {
+        max-width: 140px;
+      }
+
+      .settings-panel[hidden] {
+        display: none !important;
+      }
+
+      .settings-section-heading {
+        margin: 24px 0 8px;
+        font-size: 1.05rem;
+        font-weight: 600;
+      }
+
+      .settings-section-heading:first-of-type {
+        margin-top: 8px;
+      }
+
+      #settings-panel-general h2.settings-section-heading {
+        border-top: 1px solid #3f3f46;
+        padding-top: 18px;
+        margin-top: 26px;
+        margin-bottom: 8px;
+      }
+
+      #settings-panel-general h2.settings-section-heading:first-of-type {
+        border-top: none;
+        padding-top: 0;
+        margin-top: 8px;
+      }
+
+      #settings-panel-general .settings-general-section-divider {
+        margin: 26px 0 0;
+        padding: 0;
+        border: none;
+        border-top: 1px solid #3f3f46;
+        height: 0;
+      }
+
+      #settings-panel-general .settings-general-section-divider + .settings-section-heading {
+        border-top: none;
+        margin-top: 0;
+        padding-top: 18px;
+      }
+
+      #settings-panel-general .settings-updates-actions {
+        margin-top: 1.25rem;
+      }
+
+      .settings-global-msg {
+        margin: 12px 0;
+        padding: 10px 12px;
+        border-radius: 8px;
+        background: #27272a;
+        font-size: 14px;
+      }
+
+      .settings-jobs-table {
+        width: 100%;
+        max-width: 920px;
+        border-collapse: collapse;
+        font-size: 14px;
+        margin-top: 12px;
+      }
+
+      .settings-jobs-table th,
+      .settings-jobs-table td {
+        border: 1px solid #3f3f46;
+        padding: 10px 12px;
+        text-align: left;
+        vertical-align: middle;
+      }
+
+      .settings-jobs-table th {
+        background: #27272a;
+        font-weight: 600;
+      }
+
+      .settings-jobs-table input[type='number'] {
+        min-width: 72px;
+        max-width: 100px;
+      }
+
+      .settings-jobs-table .job-schedule-meta {
+        font-size: 12px;
+        white-space: nowrap;
+        max-width: 11rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .settings-jobs-table .job-result-failure {
+        color: #f87171;
+      }
+
+      .settings-jobs-footnotes {
+        margin-top: 16px;
+        margin-bottom: 0;
+        padding-left: 1.35rem;
+        max-width: 640px;
+        list-style: disc;
+      }
+
+      .settings-jobs-footnotes li {
+        margin-top: 8px;
+      }
+
+      .settings-jobs-footnotes li:first-child {
+        margin-top: 0;
+      }
+    </style>
+  </head>
+  <body class="app-layout">
+    <div class="app-shell">
+      <aside class="app-sidebar" aria-label="Main navigation">
+        <a href="/index.html" class="app-sidebar__brand" aria-label="TrackFlow home">
+          <img class="app-sidebar__logo" src="/trackflow-logo.svg" width="384" height="60" alt="" decoding="async" />
+        </a>
+        <nav class="app-sidebar__nav">
+          <a href="/index.html" class="app-nav-item" aria-label="Discover">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            <span class="app-nav-item__label">Discover</span>
+          </a>
+          <a href="/following.html" class="app-nav-item" aria-label="Following">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>
+            <span class="app-nav-item__label">Following</span>
+          </a>
+          <a href="/requests.html" class="app-nav-item" aria-label="Requests">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M15 2H9a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V3a1 1 0 0 0-1-1z"/><path d="M9 12h6"/><path d="M9 16h6"/></svg>
+            <span class="app-nav-item__label">Requests</span>
+          </a>
+          <a href="/jukebox.html" class="app-nav-item" aria-label="Jukebox">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
+            <span class="app-nav-item__label">Jukebox</span>
+          </a>
+          <a href="/settings.html" class="app-nav-item app-nav-item--active" aria-current="page" aria-label="Settings" hidden>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+            <span class="app-nav-item__label">Settings</span>
+          </a>
+        </nav>
+      </aside>
+      <main class="app-main">
+        <div class="container">
+      <div class="search-row" data-app-top-search>
+        <div class="search-field">
+          <span class="search-field__icon" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          </span>
+          <input type="text" placeholder="Search artists, albums, tracks &amp; playlists" aria-label="Search" />
+        </div>
+      </div>
+      <h1>Settings</h1>
+      <p id="settingsGlobalMessage" class="settings-global-msg" hidden role="status"></p>
+
+      <div class="settings-tabs" role="tablist" aria-label="Settings sections">
+        <button
+          type="button"
+          class="settings-tab is-active"
+          role="tab"
+          id="tab-general"
+          aria-selected="true"
+          aria-controls="settings-panel-general"
+          data-panel="general"
+        >
+          General
+        </button>
+        <button
+          type="button"
+          class="settings-tab"
+          role="tab"
+          id="tab-users"
+          aria-selected="false"
+          aria-controls="settings-panel-users"
+          data-panel="users"
+        >
+          Users
+        </button>
+        <button
+          type="button"
+          class="settings-tab"
+          role="tab"
+          id="tab-download"
+          aria-selected="false"
+          aria-controls="settings-panel-download"
+          data-panel="download"
+        >
+          Download
+        </button>
+        <button
+          type="button"
+          class="settings-tab"
+          role="tab"
+          id="tab-integrations"
+          aria-selected="false"
+          aria-controls="settings-panel-integrations"
+          data-panel="integrations"
+        >
+          Integrations
+        </button>
+        <button
+          type="button"
+          class="settings-tab"
+          role="tab"
+          id="tab-jobs"
+          aria-selected="false"
+          aria-controls="settings-panel-jobs"
+          data-panel="jobs"
+        >
+          Jobs
+        </button>
+      </div>
+
+      <div id="settings-panel-general" class="settings-panel" role="tabpanel" aria-labelledby="tab-general">
+      <h2 class="settings-section-heading">Updates</h2>
+      <div class="setting-row">
+        <p class="setting-hint">Current version: <strong id="checkUpdateCurrentVersion">—</strong></p>
+        <div
+          class="settings-updates-actions"
+          style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px"
+        >
+          <button type="button" id="checkUpdateBtn">Check for updates</button>
+          <span id="checkUpdateMsg" class="setting-hint" style="margin: 0" aria-live="polite"></span>
+        </div>
+      </div>
+
+      <hr class="settings-general-section-divider" aria-hidden="true" />
+
+      <div class="setting-row">
+        <label class="block-label" for="displayTimezone">Timezone</label>
+        <input
+          id="displayTimezone"
+          type="text"
+          class="integration-wide"
+          spellcheck="false"
+          autocomplete="off"
+          placeholder="e.g. America/New_York or UTC"
+        />
+        <p class="setting-hint">
+          IANA timezone for timestamps on the Requests page (e.g. <code>Europe/London</code>, <code>UTC</code>).
+        </p>
+      </div>
+
+      <h2 class="settings-section-heading">Library</h2>
+      <div class="setting-row">
+        <label class="block-label" for="libraryPath">Music library folder</label>
+        <div class="setting-inline-input-save">
+          <input id="libraryPath" type="text" autocomplete="off" spellcheck="false" />
+          <button id="saveLibraryBtn" type="button" aria-label="Save music library folder path">
+            Save
+          </button>
+        </div>
+        <p class="setting-hint">Final location for moved tracks (same role as the old <code>LIBRARY_PATH</code>).</p>
+      </div>
+
+      <div class="setting-row">
+        <label class="block-label" for="fileNamingPattern">Library file naming pattern</label>
+        <input
+          id="fileNamingPattern"
+          type="text"
+          name="file_naming_pattern"
+          class="file-naming-input"
+          spellcheck="false"
+          autocomplete="off"
+          aria-describedby="fileNamingHint fileNamingPreview fileNamingError"
+        />
+        <p id="fileNamingHint" class="setting-hint">
+          Use variables like <code>%artist%</code>, <code>%album%</code>, <code>%title%</code>,
+          <code>%year%</code>, <code>%track_number%</code>, <code>%format%</code>. Use
+          <code>/</code> for folders. The extension is added automatically. Applies only to
+          <strong>new</strong> downloads.
+        </p>
+        <p class="setting-hint file-naming-sample" aria-hidden="true">
+          Preview sample: Artist <strong>Drake</strong> · Album <strong>Views</strong> · Title
+          <strong>One Dance</strong> · Format <strong>flac</strong>
+        </p>
+        <p id="fileNamingPreview" class="file-naming-preview" aria-live="polite"></p>
+        <p id="fileNamingError" class="file-naming-error" role="alert" hidden></p>
+      </div>
+
+      <div class="setting-row">
+        <button type="button" id="openManualImportBtn">Manual import…</button>
+        <p class="setting-hint">
+          Open a window to pick a local audio file, match it to Deezer, then run the same library import steps as after a download
+          (tags, rename, move into the music library folder).
+        </p>
+      </div>
+
+      <hr class="settings-general-section-divider" aria-hidden="true" />
+
+      <h2 class="settings-section-heading">Requests</h2>
+      <div class="setting-row">
+        <label>
+          <input id="autoApprove" type="checkbox" />
+          Auto-approve track requests
+        </label>
+      </div>
+
+      <div class="setting-row">
+        <label>
+          <input id="followRequestsAutoApprove" type="checkbox" />
+          Auto-approve follow requests
+        </label>
+      </div>
+
+      <div class="setting-row">
+        <label>
+          <input id="jukeboxRequestsAutoApprove" type="checkbox" />
+          Auto-approve jukebox track requests
+        </label>
+      </div>
+
+      <div class="setting-row">
+        <label class="block-label" for="completedRequestAutoClearDays">Automatically clear completed requests after (days)</label>
+        <input id="completedRequestAutoClearDays" type="number" min="0" max="3650" step="1" />
+        <p class="setting-hint">
+          <code>0</code> disables automatic removal. When set, the Jobs tab can run this on a schedule (completed rows
+          only). Denied and other statuses are not affected.
+        </p>
+      </div>
+
+      <h2 class="settings-section-heading">Email</h2>
+      <p class="setting-hint">
+        SMTP settings for the recurring <strong>Status email</strong> job (Jobs tab). Use TLS on port 587 or enable secure
+        connection for port 465.
+      </p>
+      <div class="setting-row">
+        <label class="block-label" for="smtpHost">SMTP host</label>
+        <input id="smtpHost" type="text" class="integration-wide" autocomplete="off" spellcheck="false" placeholder="smtp.example.com" />
+      </div>
+      <div class="setting-row">
+        <label class="block-label" for="smtpPort">SMTP port</label>
+        <input id="smtpPort" type="number" min="1" max="65535" step="1" inputmode="numeric" />
+      </div>
+      <div class="setting-row">
+        <label>
+          <input id="smtpSecure" type="checkbox" />
+          Use TLS/SSL (e.g. implicit SSL on port 465)
+        </label>
+      </div>
+      <div class="setting-row">
+        <label class="block-label" for="smtpUser">SMTP username</label>
+        <input id="smtpUser" type="text" class="integration-wide" autocomplete="off" spellcheck="false" />
+        <p class="setting-hint">Optional if your relay does not require authentication.</p>
+      </div>
+      <div class="setting-row">
+        <label class="block-label" for="smtpPassword">SMTP password</label>
+        <input id="smtpPassword" type="password" class="integration-wide" autocomplete="new-password" spellcheck="false" placeholder="Leave blank to keep current" />
+        <label style="display: block; margin-top: 8px; font-weight: normal">
+          <input id="clearSmtpPassword" type="checkbox" />
+          Remove stored SMTP password
+        </label>
+      </div>
+      <div class="setting-row">
+        <label class="block-label" for="emailFromAddress">From address</label>
+        <input id="emailFromAddress" type="text" class="integration-wide" autocomplete="off" spellcheck="false" placeholder="TrackFlow &lt;alerts@example.com&gt;" />
+      </div>
+      <div class="setting-row">
+        <label class="block-label" for="statusEmailTo">Status email recipients</label>
+        <input id="statusEmailTo" type="text" class="integration-wide" autocomplete="off" spellcheck="false" placeholder="admin@example.com, ops@example.com" />
+        <p class="setting-hint">Comma-separated addresses for the digest.</p>
+      </div>
+      <div class="setting-row" style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px">
+        <button type="button" id="saveEmailBtn">Save email settings</button>
+        <button type="button" id="testEmailBtn">Test email</button>
+        <span id="saveEmailMsg" class="setting-hint" aria-live="polite"></span>
+        <span id="testEmailMsg" class="setting-hint" aria-live="polite"></span>
+      </div>
+      </div>
+
+      <div id="settings-panel-download" class="settings-panel" role="tabpanel" aria-labelledby="tab-download" hidden>
+      <h2 class="settings-panel-title">Download</h2>
+      <p class="setting-hint">Soulseek / slskd connection and download behavior.</p>
+
+      <div class="setting-row">
+        <label class="block-label" for="slskdBaseUrl">slskd server URL</label>
+        <input id="slskdBaseUrl" type="text" class="integration-wide" placeholder="http://127.0.0.1:5030" autocomplete="off" spellcheck="false" />
+      </div>
+
+      <div class="setting-row">
+        <label class="block-label" for="slskdApiKey">slskd API key</label>
+        <input id="slskdApiKey" type="password" class="integration-wide" autocomplete="new-password" spellcheck="false" placeholder="Leave blank to keep current" />
+        <label style="display: block; margin-top: 8px; font-weight: normal">
+          <input id="clearSlskdApiKey" type="checkbox" />
+          Remove stored API key
+        </label>
+        <div class="setting-row" style="margin-top: 10px">
+          <button type="button" id="testSlskdBtn">Test slskd connection</button>
+          <span id="testSlskdMsg" class="setting-hint" style="margin-left: 12px" aria-live="polite"></span>
+        </div>
+      </div>
+
+      <div class="setting-row">
+        <label class="block-label" for="slskdLocalPath">Completed download folder</label>
+        <input id="slskdLocalPath" type="text" class="integration-wide" autocomplete="off" spellcheck="false" />
+        <p class="setting-hint">Where slskd writes finished files before TrackFlow moves them into the library.</p>
+      </div>
+
+      <div class="setting-row">
+        <label class="block-label" for="slskdMaxFileMiB">Max file size (MiB)</label>
+        <input id="slskdMaxFileMiB" type="number" min="1" step="1" />
+        <p class="setting-hint">Leave empty to use the default cap (50 MiB).</p>
+      </div>
+
+      <div class="setting-row">
+        <label class="block-label" for="preferredFormat">Preferred format</label>
+        <select id="preferredFormat" name="preferred_format">
+          <option value="prefer_mp3">Prefer MP3</option>
+          <option value="prefer_flac">Prefer FLAC</option>
+          <option value="mp3">MP3 only</option>
+          <option value="flac">FLAC only</option>
+        </select>
+      </div>
+
+      <div class="setting-row">
+        <label class="block-label" for="maxDownloadAttempts">Max download attempts per request</label>
+        <input
+          id="maxDownloadAttempts"
+          type="number"
+          name="max_download_attempts"
+          min="1"
+          max="20"
+          step="1"
+        />
+        <p class="setting-hint">Soulseek search attempts before marking a request <strong>failed</strong> (1–20).</p>
+      </div>
+
+      <div class="setting-row">
+        <label class="block-label" for="maxConcurrentDownloads">Max simultaneous request processing</label>
+        <input
+          id="maxConcurrentDownloads"
+          type="number"
+          name="max_concurrent_downloads"
+          min="1"
+          max="50"
+          step="1"
+        />
+        <p class="setting-hint">How many approved requests run downloads at once (1–50).</p>
+      </div>
+
+      <div class="setting-row">
+        <label>
+          <input id="slskdAutoClearCompleted" type="checkbox" />
+          Clear all completed downloads after successful transfer
+        </label>
+      </div>
+
+      <div class="setting-row">
+        <button id="saveDownloadBtn" type="button">Save download settings</button>
+      </div>
+      </div>
+
+      <div id="settings-panel-integrations" class="settings-panel" role="tabpanel" aria-labelledby="tab-integrations" hidden>
+      <h2 class="settings-panel-title">Integrations</h2>
+
+      <h3 class="settings-section-heading">Plex</h3>
+      <div class="setting-row">
+        <label>
+          <input id="plexIntegration" type="checkbox" />
+          Enable Plex integration
+        </label>
+      </div>
+
+      <div class="setting-row setting-sub">
+        <label class="block-label" for="plexUrl">Plex server URL</label>
+        <input id="plexUrl" type="text" class="integration-wide" placeholder="http://192.168.1.10:32400" autocomplete="off" spellcheck="false" />
+      </div>
+
+      <div class="setting-row setting-sub">
+        <label class="block-label" for="plexToken">Plex token</label>
+        <input id="plexToken" type="password" class="integration-wide" autocomplete="new-password" spellcheck="false" placeholder="Leave blank to keep current" />
+        <label style="display: block; margin-top: 8px; font-weight: normal">
+          <input id="clearPlexToken" type="checkbox" />
+          Remove stored Plex token
+        </label>
+      </div>
+
+      <div class="setting-row setting-sub">
+        <label class="block-label" for="plexMusicSectionId">Plex Music Library ID</label>
+        <input id="plexMusicSectionId" type="text" inputmode="numeric" />
+        <p class="setting-hint">Often <code>4</code> — check your Plex library URL.</p>
+        <div class="setting-row" style="margin-top: 10px">
+          <button type="button" id="testPlexBtn">Test Plex connection</button>
+          <span id="testPlexMsg" class="setting-hint" style="margin-left: 12px" aria-live="polite"></span>
+        </div>
+        <label class="setting-row" style="display: block; margin-top: 14px; font-weight: normal">
+          <input id="plexAuthForLogin" type="checkbox" />
+          Use Plex for authentication
+        </label>
+        <p class="setting-hint">
+          When enabled, the login page shows <strong>Sign in with Plex</strong>. New Plex sign-ins are added as users with provider
+          <strong>Plex</strong> and role <strong>User</strong>.
+        </p>
+        <label class="setting-row" style="display: block; margin-top: 14px; font-weight: normal">
+          <input id="plexRunLibraryScanBeforeSync" type="checkbox" />
+          Run Plex Library Scan Before Sync
+        </label>
+        <p class="setting-hint">
+          When enabled, each <strong>Plex Sync</strong> job asks Plex Media Server to refresh the music library first, then TrackFlow scans Plex and syncs followed playlists.
+        </p>
+      </div>
+
+      <div class="setting-row setting-sub">
+        <label>
+          <input id="requirePlexForAvailable" type="checkbox" />
+          Require Plex detection for &ldquo;Available&rdquo; status
+        </label>
+        <p class="setting-hint">
+          When enabled, TrackFlow will only treat a track as &ldquo;available&rdquo; if it has been detected in Plex.
+        </p>
+        <p class="setting-hint">
+          When disabled, a track is considered available if it exists on disk or has been detected in Plex.
+        </p>
+        <p class="setting-hint setting-hint--warning">
+          ⚠️ Tracks may already be available in Plex but will not appear as available here until the next Plex scan job runs and updates the database.
+        </p>
+      </div>
+
+      <div class="setting-row setting-sub">
+        <label>
+          <input id="plexPlayHistoryRecommendations" type="checkbox" />
+          Use Plex play history for recommendations
+        </label>
+        <p class="setting-hint">
+          When enabled, users who sign in with Plex use recent music play history from your configured Plex server to seed Discover track and artist recommendations instead of followed artists.
+          Plays count only when at least half of the track was heard (short skips are ignored).
+        </p>
+      </div>
+
+      <div class="setting-row">
+        <button id="savePlexBtn" type="button">Save Plex settings</button>
+      </div>
+      </div>
+
+      <div id="settings-panel-jobs" class="settings-panel" role="tabpanel" aria-labelledby="tab-jobs" hidden>
+      <h2 class="settings-panel-title">Jobs</h2>
+      <p class="setting-hint">Background tasks checked every minute. Intervals are in minutes.</p>
+
+      <table class="settings-jobs-table" aria-label="Scheduled jobs">
+        <thead>
+          <tr>
+            <th scope="col">Job</th>
+            <th scope="col">Enabled</th>
+            <th scope="col">Interval</th>
+            <th scope="col">Last run</th>
+            <th scope="col">Result</th>
+            <th scope="col">Next scheduled</th>
+            <th scope="col">Run now</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr data-job-row="discover_cache">
+            <td>Refresh discover and recommendations cache</td>
+            <td><input type="checkbox" id="jobDiscoverCacheEnabled" aria-label="Enable discover cache job" /></td>
+            <td><input type="number" id="discoverCacheRefreshMinutes" min="30" max="10080" step="1" aria-label="Discover cache interval minutes" /></td>
+            <td class="job-schedule-meta" data-job-last="discover_cache">—</td>
+            <td class="job-schedule-meta" data-job-result="discover_cache">—</td>
+            <td class="job-schedule-meta" data-job-next="discover_cache">—</td>
+            <td>
+              <button type="button" class="job-run-btn" data-trigger="/api/settings/trigger-discover-cache-refresh">Run</button>
+            </td>
+          </tr>
+          <tr data-job-row="library_scan">
+            <td>Scan library files in folder</td>
+            <td><input type="checkbox" id="jobLibraryScanEnabled" aria-label="Enable library scan job" /></td>
+            <td><input type="number" id="libraryScanIntervalMinutes" min="5" max="1440" step="1" aria-label="Library scan interval minutes" /></td>
+            <td class="job-schedule-meta" data-job-last="library_scan">—</td>
+            <td class="job-schedule-meta" data-job-result="library_scan">—</td>
+            <td class="job-schedule-meta" data-job-next="library_scan">—</td>
+            <td>
+              <button type="button" class="job-run-btn" data-trigger="/api/settings/trigger-library-scan">Run</button>
+            </td>
+          </tr>
+          <tr data-job-row="follow_sync">
+            <td>Sync followed artists and playlists tracks</td>
+            <td><input type="checkbox" id="jobFollowSyncEnabled" aria-label="Enable follow sync job" /></td>
+            <td><input type="number" id="followSyncIntervalMinutes" min="5" max="1440" step="1" aria-label="Follow sync interval minutes" /></td>
+            <td class="job-schedule-meta" data-job-last="follow_sync">—</td>
+            <td class="job-schedule-meta" data-job-result="follow_sync">—</td>
+            <td class="job-schedule-meta" data-job-next="follow_sync">—</td>
+            <td>
+              <button type="button" class="job-run-btn" data-trigger="/api/settings/trigger-follow-sync">Run</button>
+            </td>
+          </tr>
+          <tr data-job-row="orphan_cleanup">
+            <td>Completed download folder cleanup</td>
+            <td><input type="checkbox" id="orphanCleanupEnabled" aria-label="Enable orphan cleanup job" /></td>
+            <td><input type="number" id="orphanCleanupIntervalMinutes" min="1" max="1440" step="1" aria-label="Orphan cleanup interval minutes" /></td>
+            <td class="job-schedule-meta" data-job-last="orphan_cleanup">—</td>
+            <td class="job-schedule-meta" data-job-result="orphan_cleanup">—</td>
+            <td class="job-schedule-meta" data-job-next="orphan_cleanup">—</td>
+            <td>
+              <button type="button" class="job-run-btn" data-trigger="/api/settings/trigger-orphan-cleanup">Run</button>
+            </td>
+          </tr>
+          <tr data-job-row="completed_request_clear">
+            <td>Clear completed request history</td>
+            <td><input type="checkbox" id="jobCompletedRequestClearEnabled" aria-label="Enable completed request clear job" /></td>
+            <td><input type="number" id="jobCompletedRequestClearIntervalMinutes" min="5" max="10080" step="1" aria-label="Completed request clear interval minutes" /></td>
+            <td class="job-schedule-meta" data-job-last="completed_request_clear">—</td>
+            <td class="job-schedule-meta" data-job-result="completed_request_clear">—</td>
+            <td class="job-schedule-meta" data-job-next="completed_request_clear">—</td>
+            <td>
+              <button type="button" class="job-run-btn" data-trigger="/api/settings/trigger-clear-completed-requests">Run</button>
+            </td>
+          </tr>
+          <tr data-job-row="status_email">
+            <td>Send status email (digest)</td>
+            <td><input type="checkbox" id="jobStatusEmailEnabled" aria-label="Enable status email job" /></td>
+            <td><input type="number" id="statusEmailIntervalMinutes" min="240" max="10080" step="1" aria-label="Status email interval minutes" /></td>
+            <td class="job-schedule-meta" data-job-last="status_email">—</td>
+            <td class="job-schedule-meta" data-job-result="status_email">—</td>
+            <td class="job-schedule-meta" data-job-next="status_email">—</td>
+            <td>
+              <button type="button" class="job-run-btn" data-trigger="/api/settings/trigger-status-email">Run</button>
+            </td>
+          </tr>
+          <tr data-job-row="plex_sync">
+            <td>Plex Sync (scan library + sync playlists)</td>
+            <td><input type="checkbox" id="jobPlexSyncEnabled" aria-label="Enable Plex Sync job" /></td>
+            <td><input type="number" id="plexScanIntervalMinutes" min="5" max="720" step="1" aria-label="Plex Sync interval minutes" /></td>
+            <td class="job-schedule-meta" data-job-last="plex_sync">—</td>
+            <td class="job-schedule-meta" data-job-result="plex_sync">—</td>
+            <td class="job-schedule-meta" data-job-next="plex_sync">—</td>
+            <td>
+              <button type="button" class="job-run-btn" data-trigger="/api/settings/trigger-plex-sync">Run</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <ul class="setting-hint settings-jobs-footnotes">
+        <li>
+          Completed history clearing uses <strong>Automatically clear completed requests after (days)</strong> on the General tab
+          (must be at least 1).
+        </li>
+        <li>Plex Sync does nothing if Plex integration is off.</li>
+        <li>
+          Status email requires SMTP and recipients under General → Email (interval 240–10080 minutes).
+        </li>
+      </ul>
+      </div>
+
+      <div id="settings-panel-users" class="settings-panel" role="tabpanel" aria-labelledby="tab-users" hidden>
+        <h2 class="settings-panel-title">Users</h2>
+        <p class="setting-hint">
+          Create logins and assign <strong>Admin</strong> or <strong>User</strong>. Users only see their own track requests and
+          cannot open Settings. The built-in administrator cannot be deleted or reassigned to User.
+        </p>
+
+        <form id="addUserForm" class="setting-row" style="margin-top: 20px">
+          <h3 style="margin: 0 0 10px; font-size: 1rem">Add local user</h3>
+          <label class="block-label" for="newUsername">Username</label>
+          <input id="newUsername" type="text" autocomplete="username" spellcheck="false" />
+          <label class="block-label" for="newPassword" style="margin-top: 10px">Password</label>
+          <input id="newPassword" type="password" autocomplete="new-password" />
+          <label class="block-label" for="newUserRole" style="margin-top: 10px">Role</label>
+          <select id="newUserRole">
+            <option value="user" selected>User</option>
+            <option value="admin">Admin</option>
+          </select>
+          <div class="setting-row" style="margin-top: 12px">
+            <button type="submit" id="addUserSubmit">Create user</button>
+          </div>
+          <p id="usersFormMessage" class="setting-hint" style="margin-top: 8px"></p>
+        </form>
+
+        <h3 style="margin: 28px 0 10px; font-size: 1rem">Existing users</h3>
+        <div style="overflow-x: auto">
+          <table class="settings-users-table" aria-label="Users">
+            <thead>
+              <tr>
+                <th scope="col">Username</th>
+                <th scope="col">Provider</th>
+                <th scope="col">Role</th>
+                <th scope="col">Jukebox</th>
+                <th scope="col">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="usersTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+        </div>
+      </main>
+    </div>
+
+    <script type="module" src="/src/pages/settings-page.js"></script>
+  </body>
+</html>

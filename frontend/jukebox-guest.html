@@ -1,0 +1,1328 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- Cast Web Sender: __onGCastApiAvailable MUST be defined before the SDK script (Google docs). -->
+    <script>
+      (function () {
+        window.__tfCastApiReadyResolved = false;
+        window.__tfCastApiAvailable = undefined;
+        var prev = window.__onGCastApiAvailable;
+        window.__onGCastApiAvailable = function (isAvailable) {
+          try {
+            if (typeof prev === 'function') {
+              prev(isAvailable);
+            }
+          } catch (e) {}
+          window.__tfCastApiAvailable = !!isAvailable;
+          if (!window.__tfCastApiReadyResolved) {
+            window.__tfCastApiReadyResolved = true;
+            try {
+              window.dispatchEvent(new Event('tf-cast-api-ready'));
+            } catch (e2) {}
+          }
+        };
+      })();
+    </script>
+    <script async src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#09090b" />
+    <title>Jukebox · Launch</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --jb-search-h: 72px;
+        --jb-safe-bottom: env(safe-area-inset-bottom, 0px);
+        --jb-safe-top: env(safe-area-inset-top, 0px);
+        --jb-touch-min: 48px;
+        --jb-menu-gutter: calc(var(--jb-touch-min) + 12px);
+        --jb-frame: #27272a;
+        --jb-inset: 16px;
+        /* Space reserved for discovery (two strips + jb-mid padding); larger ⇒ smaller art, no vertical scroll */
+        --jb-discover-reserve: min(450px, calc(100dvh - 300px));
+        /* Square artwork + ctrl row: never eat the card bands; also cap visual weight on tall viewports */
+        --jb-now-edge-cap: max(
+          200px,
+          min(
+            34vmin,
+            calc(
+              100dvh - var(--jb-search-h) - var(--jb-safe-top) - var(--jb-safe-bottom) - var(--jb-discover-reserve) - 84px
+            )
+          )
+        );
+        /* Match Up next / Recently played list height to the now-playing block (art + controls), not raw track count */
+        --jb-side-scroll-max: calc(var(--jb-now-edge-cap) + 32px);
+      }
+      @media (max-height: 720px) {
+        :root {
+          --jb-discover-reserve: min(380px, calc(100dvh - 240px));
+          --jb-now-edge-cap: max(
+            168px,
+            min(
+              32vmin,
+              calc(
+                100dvh - var(--jb-search-h) - var(--jb-safe-top) - var(--jb-safe-bottom) - var(--jb-discover-reserve) - 72px
+              )
+            )
+          );
+          --jb-side-scroll-max: calc(var(--jb-now-edge-cap) + 28px);
+        }
+      }
+      @media (max-height: 600px) {
+        :root {
+          --jb-discover-reserve: min(340px, calc(100dvh - 200px));
+          --jb-now-edge-cap: max(
+            152px,
+            min(30vmin, calc(100dvh - var(--jb-search-h) - var(--jb-safe-top) - var(--jb-safe-bottom) - var(--jb-discover-reserve) - 64px))
+          );
+          --jb-side-scroll-max: calc(var(--jb-now-edge-cap) + 24px);
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        height: 100%;
+        height: 100dvh;
+        overflow: hidden;
+      }
+      body {
+        margin: 0;
+        font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+        background: #09090b;
+        color: #fafafa;
+        height: 100vh;
+        max-height: 100vh;
+        height: 100dvh;
+        max-height: 100dvh;
+        overflow: hidden;
+      }
+      .jb-loading-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 200;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        box-sizing: border-box;
+        background: #09090b;
+        color: #e4e4e7;
+      }
+      .jb-loading-overlay[hidden] {
+        display: none !important;
+      }
+      .jb-loading-overlay__text {
+        margin: 0;
+        font-size: 1rem;
+        font-weight: 600;
+        text-align: center;
+      }
+      .jb-shell {
+        height: 100vh;
+        max-height: 100vh;
+        height: 100dvh;
+        max-height: 100dvh;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .jb-layout {
+        position: relative;
+        flex: 1;
+        min-height: 0;
+        width: 100%;
+        margin: 0;
+        padding: max(12px, calc(var(--jb-safe-top) + 6px)) var(--jb-inset) 0;
+        box-sizing: border-box;
+        overflow-x: hidden;
+        overflow-y: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+      .jb-top-region {
+        position: relative;
+        z-index: 40;
+        flex: 0 0 auto;
+        min-height: 0;
+        padding-bottom: 12px;
+        border-bottom: 1px solid var(--jb-frame);
+        background: linear-gradient(180deg, rgba(24, 24, 27, 0.95) 0%, transparent 100%);
+        min-width: 0;
+        overflow: visible;
+        display: flex;
+        flex-direction: column;
+      }
+      .jb-top-grid {
+        flex: 0 0 auto;
+        min-height: 0;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+        align-items: stretch;
+        gap: clamp(12px, 2.5vw, 28px);
+        min-width: 0;
+        overflow: hidden;
+      }
+      @media (min-width: 769px) {
+        .jb-top-grid {
+          grid-template-columns: minmax(0, 1fr) max-content minmax(0, 1fr);
+          grid-template-rows: auto;
+          align-content: start;
+          padding-left: 18px;
+          padding-right: var(--jb-menu-gutter);
+          box-sizing: border-box;
+          gap: clamp(8px, 1.2vw, 16px);
+          min-height: 0;
+        }
+        .jb-top-grid > .jb-side,
+        .jb-top-grid > .jb-now {
+          min-height: 0;
+        }
+        .jb-now {
+          justify-self: center;
+          align-self: start;
+          width: max-content;
+          max-width: var(--jb-now-edge-cap);
+          min-width: 0;
+          justify-content: center;
+        }
+        .jb-side--queue,
+        .jb-side--history {
+          justify-self: stretch;
+          align-self: start;
+          overflow: hidden;
+        }
+      }
+      .jb-menu-wrap {
+        position: absolute;
+        top: max(0px, calc(var(--jb-safe-top) - 4px));
+        right: 0;
+        z-index: 45;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 0;
+      }
+      @media (min-width: 769px) {
+        .jb-menu-wrap {
+          right: 2px;
+        }
+      }
+      .jb-top-bar-actions {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: 8px;
+      }
+      /* Primary Cast: native button + CastContext.requestSession() (visible, not inside overflow menu). */
+      .jb-cast-main-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-sizing: border-box;
+        min-width: var(--jb-touch-min);
+        min-height: var(--jb-touch-min);
+        border-radius: 12px;
+        border: 1px solid #3f3f46;
+        background: #27272a;
+        color: #e4e4e7;
+        cursor: pointer;
+        padding: 0;
+        margin: 0;
+      }
+      .jb-cast-main-btn:hover {
+        background: #3f3f46;
+      }
+      .jb-cast-main-btn.is-connected {
+        border-color: #a78bfa;
+        color: #a78bfa;
+        box-shadow: 0 0 0 1px rgba(167, 139, 250, 0.35);
+      }
+      .jb-cast-main-btn svg {
+        width: 22px;
+        height: 22px;
+        display: block;
+      }
+      .jb-menu-btn {
+        min-width: var(--jb-touch-min);
+        min-height: var(--jb-touch-min);
+        border-radius: 12px;
+        border: 1px solid #3f3f46;
+        background: #27272a;
+        color: #fafafa;
+        font-size: 1.25rem;
+        line-height: 1;
+        cursor: pointer;
+      }
+      .jb-menu-panel {
+        position: absolute;
+        right: 0;
+        top: calc(100% + 6px);
+        min-width: 200px;
+        background: #18181b;
+        border: 1px solid #3f3f46;
+        border-radius: 12px;
+        display: none;
+        z-index: 50;
+        overflow: hidden;
+      }
+      .jb-menu-panel.open {
+        display: block;
+      }
+      .jb-menu-panel button {
+        display: block;
+        width: 100%;
+        text-align: left;
+        padding: 14px 16px;
+        border: none;
+        background: none;
+        color: #e4e4e7;
+        font-size: 15px;
+        cursor: pointer;
+      }
+      .jb-menu-panel button:active {
+        background: #27272a;
+      }
+      .jb-cast-line {
+        margin: 6px 0 0;
+        font-size: 0.7rem;
+        font-weight: 600;
+        color: #a78bfa;
+        line-height: 1.25;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .jb-cast-line[hidden] {
+        display: none !important;
+      }
+      .jb-now {
+        grid-column: auto;
+        width: 100%;
+        max-width: none;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-self: center;
+        align-self: start;
+        box-sizing: border-box;
+        overflow: visible;
+        gap: 6px;
+      }
+      .jb-cover-wrap {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        flex-shrink: 0;
+      }
+      .jb-cover-stack {
+        position: relative;
+        width: min(100%, var(--jb-now-edge-cap));
+        max-width: 100%;
+        aspect-ratio: 1;
+        flex-shrink: 0;
+        border-radius: 14px;
+        overflow: hidden;
+        background: #27272a;
+      }
+      .jb-cover-bg {
+        position: absolute;
+        inset: -12px;
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        filter: blur(28px);
+        opacity: 0.4;
+        transform: scale(1.08);
+        pointer-events: none;
+      }
+      .jb-cover-bg.is-empty {
+        display: none;
+      }
+      .jb-cover-frame {
+        position: relative;
+        z-index: 1;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        border-radius: 14px;
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+      }
+      .jb-cover-img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        object-position: center;
+        display: block;
+      }
+      .jb-cover-meta {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 2;
+        padding: 28px 12px 10px;
+        text-align: left;
+        pointer-events: none;
+        background: linear-gradient(
+          to top,
+          rgba(0, 0, 0, 0.88) 0%,
+          rgba(0, 0, 0, 0.5) 42%,
+          rgba(0, 0, 0, 0.12) 78%,
+          transparent 100%
+        );
+      }
+      .jb-cover-meta h2 {
+        margin: 0;
+        font-size: 0.95rem;
+        font-weight: 700;
+        line-height: 1.2;
+        color: #fafafa;
+        text-shadow: 0 1px 3px rgba(0, 0, 0, 0.65);
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+      .jb-cover-meta p {
+        margin: 4px 0 0;
+        font-size: 0.78rem;
+        color: #e4e4e7;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .jb-ctrl-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        width: min(100%, var(--jb-now-edge-cap));
+        max-width: 100%;
+        min-width: 0;
+        flex-shrink: 0;
+        padding: 0 2px;
+      }
+      .jb-progress-cluster {
+        flex: 1 1 0;
+        min-width: 0;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .jb-progress-rail {
+        flex: 1 1 0;
+        min-width: 24px;
+        height: 6px;
+        background: #3f3f46;
+        border-radius: 3px;
+        overflow: hidden;
+        pointer-events: none;
+      }
+      .jb-progress-fill {
+        height: 100%;
+        width: 0%;
+        background: #a78bfa;
+        border-radius: 3px;
+        transition: width 0.12s linear;
+      }
+      .jb-time {
+        font-size: 10px;
+        color: #a1a1aa;
+        font-variant-numeric: tabular-nums;
+        flex-shrink: 0;
+        line-height: 1;
+      }
+      .jb-play,
+      .jb-skip,
+      .jb-vol-toggle {
+        width: 36px;
+        height: 36px;
+        max-width: 40px;
+        max-height: 40px;
+        padding: 0;
+        border-radius: 50%;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+      }
+      .jb-play {
+        border: none;
+        background: #fafafa;
+        color: #18181b;
+      }
+      .jb-skip {
+        border: 1px solid #3f3f46;
+        background: #27272a;
+        color: #fafafa;
+      }
+      .jb-vol-toggle {
+        border: 1px solid #3f3f46;
+        background: #27272a;
+        color: #fafafa;
+      }
+      .jb-vol-toggle[aria-expanded='true'] {
+        background: #3f3f46;
+        border-color: #52525b;
+      }
+      .jb-vol-pop {
+        position: relative;
+        flex-shrink: 0;
+      }
+      .jb-vol-panel {
+        position: absolute;
+        bottom: calc(100% + 8px);
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 60;
+        width: 112px;
+        padding: 10px 12px;
+        background: #18181b;
+        border: 1px solid #3f3f46;
+        border-radius: 10px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+      }
+      .jb-vol-panel[hidden] {
+        display: none !important;
+      }
+      .jb-vol-panel input[type='range'] {
+        display: block;
+        width: 100%;
+        height: 6px;
+        margin: 0;
+        accent-color: #a78bfa;
+      }
+      .jb-skip svg {
+        width: 18px;
+        height: 18px;
+      }
+      .jb-play svg {
+        width: 20px;
+        height: 20px;
+      }
+      .jb-vol-toggle svg {
+        width: 18px;
+        height: 18px;
+      }
+      .jb-side {
+        min-width: 0;
+        min-height: 0;
+        width: 100%;
+        max-width: min(320px, 38vw);
+        padding: 0 4px;
+        display: flex;
+        flex-direction: column;
+        opacity: 0.95;
+        overflow: hidden;
+        align-self: start;
+      }
+      @media (min-width: 769px) {
+        .jb-side {
+          align-self: stretch;
+          max-width: none;
+        }
+      }
+      .jb-side h3 {
+        margin: 0 0 8px;
+        font-size: 0.68rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #71717a;
+        flex-shrink: 0;
+      }
+      .jb-side .jb-queue-title {
+        color: #d4d4d8;
+      }
+      .jb-side .jb-queue-artist {
+        color: #a1a1aa;
+      }
+      .jb-queue-scroll {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-x: hidden;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        padding-right: 2px;
+        overscroll-behavior: contain;
+        scrollbar-width: thin;
+        scrollbar-color: #3f3f46 #18181b;
+      }
+      .jb-queue-scroll::-webkit-scrollbar {
+        width: 6px;
+      }
+      .jb-queue-scroll::-webkit-scrollbar-thumb {
+        background: #3f3f46;
+        border-radius: 6px;
+      }
+      .jb-queue-scroll::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      @media (min-width: 769px) {
+        .jb-side .jb-queue-scroll {
+          flex: 1 1 0;
+          max-height: var(--jb-side-scroll-max);
+        }
+      }
+      .jb-side--history .jb-queue-scroll:empty {
+        min-height: min(96px, var(--jb-side-scroll-max, 200px));
+        flex: 1 1 auto;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 12px;
+        border: 1px dashed #3f3f46;
+        background: rgba(39, 39, 42, 0.35);
+        color: #71717a;
+        font-size: 0.78rem;
+        text-align: center;
+        padding: 12px;
+      }
+      .jb-side--history .jb-queue-scroll:empty::before {
+        content: 'Nothing played yet';
+      }
+      .jb-queue-status {
+        flex-shrink: 0;
+        width: 26px;
+        height: 26px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: rgba(255, 255, 255, 0.92);
+        filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
+      }
+      .jb-queue-status .track-row__status-svg {
+        display: block;
+      }
+      .jb-queue-status .track-row__status-svg--spin {
+        transform-origin: 12px 12px;
+        animation: jb-queue-status-spin 0.85s linear infinite;
+      }
+      @keyframes jb-queue-status-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      .jb-queue-row--compact .jb-queue-status {
+        width: 22px;
+        height: 22px;
+      }
+      .jb-queue-row--compact .jb-queue-status svg {
+        width: 18px;
+        height: 18px;
+      }
+      .jb-queue-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 6px;
+        border-radius: 10px;
+        margin-bottom: 4px;
+      }
+      button.jb-queue-row.jb-history-row {
+        width: 100%;
+        margin: 0 0 4px;
+        border: none;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        text-align: left;
+        cursor: pointer;
+      }
+      button.jb-queue-row.jb-history-row:hover {
+        background: #27272a;
+      }
+      .jb-queue-row--next {
+        background: #27272a;
+        outline: 2px solid #a78bfa;
+        outline-offset: -2px;
+      }
+      .jb-queue-row--compact {
+        padding: 5px 6px;
+      }
+      .jb-queue-row--compact .jb-queue-art {
+        width: 36px;
+        height: 36px;
+      }
+      .jb-queue-row--compact .jb-queue-title {
+        font-size: 0.78rem;
+      }
+      .jb-queue-row--compact .jb-queue-artist {
+        font-size: 0.68rem;
+      }
+      .jb-queue-art {
+        width: 44px;
+        height: 44px;
+        border-radius: 8px;
+        object-fit: cover;
+        background: #3f3f46;
+        flex-shrink: 0;
+      }
+      .jb-queue-text {
+        min-width: 0;
+        flex: 1;
+      }
+      .jb-queue-title {
+        font-size: 0.82rem;
+        font-weight: 600;
+        line-height: 1.2;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+      .jb-queue-artist {
+        font-size: 0.72rem;
+        color: #a1a1aa;
+        margin-top: 2px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .jb-mid {
+        flex: 1 1 0;
+        min-height: 0;
+        margin-top: 4px;
+        padding: 12px 4px calc(var(--jb-search-h) + var(--jb-safe-bottom) + 20px);
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+        overflow-x: hidden;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior: contain;
+      }
+      .jb-row-block {
+        flex: 0 0 auto;
+        display: flex;
+        flex-direction: column;
+        margin-top: 0;
+        padding: 0 8px;
+        box-sizing: border-box;
+        overflow: visible;
+      }
+      .jb-row-block h3 {
+        margin: 0 0 6px;
+        flex-shrink: 0;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+        color: #a1a1aa;
+      }
+      .jb-cards {
+        flex: 0 0 auto;
+        display: flex;
+        flex-wrap: nowrap;
+        gap: 12px;
+        padding: 2px 0 10px;
+        margin: 0 -8px;
+        padding-left: 8px;
+        padding-right: 8px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        scroll-snap-type: x mandatory;
+        -webkit-overflow-scrolling: touch;
+        align-items: flex-start;
+        overscroll-behavior-x: contain;
+        scrollbar-width: thin;
+        scrollbar-color: #3f3f46 transparent;
+      }
+      .jb-cards::-webkit-scrollbar {
+        height: 8px;
+      }
+      .jb-cards::-webkit-scrollbar-thumb {
+        background: #3f3f46;
+        border-radius: 8px;
+      }
+      .jb-cards::-webkit-scrollbar-track {
+        background: rgba(24, 24, 27, 0.4);
+        border-radius: 8px;
+      }
+      .jb-card {
+        flex: 0 0 132px;
+        width: 132px;
+        flex-shrink: 0;
+        scroll-snap-align: start;
+        cursor: pointer;
+        border: none;
+        background: none;
+        padding: 0 0 4px;
+        text-align: left;
+        color: inherit;
+        font: inherit;
+      }
+      .jb-card-img {
+        width: 132px;
+        height: 132px;
+        flex-shrink: 0;
+        border-radius: 14px;
+        object-fit: cover;
+        background: #27272a;
+        display: block;
+      }
+      .jb-card-title {
+        margin-top: 8px;
+        font-size: 0.78rem;
+        font-weight: 600;
+        line-height: 1.3;
+        min-height: calc(1.3em * 2);
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+      .jb-card-artist {
+        font-size: 0.7rem;
+        color: #a1a1aa;
+        margin-top: 4px;
+        line-height: 1.25;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .jb-shell.jb-search-open .jb-top-region {
+        visibility: hidden;
+        pointer-events: none;
+      }
+      .jb-search-bar {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        z-index: 50;
+        padding: 12px 0 calc(12px + var(--jb-safe-bottom));
+        background: #18181b;
+        border-top: 1px solid var(--jb-frame);
+        box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.35);
+      }
+      .jb-search-bar__inner {
+        width: 100%;
+        padding: 0 var(--jb-inset);
+        box-sizing: border-box;
+      }
+      .jb-search-bar input {
+        width: 100%;
+        min-height: 48px;
+        padding: 0 16px;
+        /* >=16px prevents iOS Safari from zooming the viewport on focus */
+        font-size: max(16px, 1.05rem);
+        border-radius: 14px;
+        border: 1px solid #3f3f46;
+        background: #09090b;
+        color: #fafafa;
+      }
+      .jb-sheet {
+        position: fixed;
+        left: 0;
+        right: 0;
+        top: max(0px, var(--jb-safe-top));
+        bottom: calc(var(--jb-search-h) + var(--jb-safe-bottom));
+        z-index: 30;
+        background: #0c0c0e;
+        border-top: 1px solid #27272a;
+        transform: translateY(100%);
+        transition: transform 0.22s ease-out;
+        display: flex;
+        flex-direction: column;
+      }
+      .jb-sheet.open {
+        transform: translateY(0);
+        z-index: 45;
+      }
+      .jb-sheet-head {
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 12px;
+        border-bottom: 1px solid #27272a;
+      }
+      .jb-sheet-back {
+        min-height: var(--jb-touch-min);
+        padding: 0 16px;
+        border-radius: 12px;
+        border: 1px solid #3f3f46;
+        background: #27272a;
+        color: #fafafa;
+        font-size: 15px;
+        cursor: pointer;
+      }
+      .jb-sheet-title {
+        flex: 1;
+        font-size: 0.95rem;
+        font-weight: 600;
+        min-width: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .jb-sheet-close {
+        min-width: var(--jb-touch-min);
+        min-height: var(--jb-touch-min);
+        border-radius: 12px;
+        border: 1px solid #3f3f46;
+        background: #27272a;
+        color: #fafafa;
+        font-size: 1.2rem;
+        cursor: pointer;
+      }
+      .jb-sheet-body {
+        flex: 1;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        padding: 8px 12px 16px;
+      }
+      .jb-result-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 10px;
+        border-radius: 14px;
+        margin-bottom: 8px;
+        background: #18181b;
+        border: 1px solid #27272a;
+      }
+      .jb-result-row img {
+        width: 56px;
+        height: 56px;
+        border-radius: 10px;
+        object-fit: cover;
+        background: #3f3f46;
+        flex-shrink: 0;
+      }
+      .jb-result-meta {
+        flex: 1;
+        min-width: 0;
+      }
+      .jb-result-meta .t {
+        font-weight: 600;
+        font-size: 0.95rem;
+      }
+      .jb-result-meta .a {
+        font-size: 0.8rem;
+        color: #a1a1aa;
+        margin-top: 4px;
+      }
+      .jb-result-status {
+        flex-shrink: 0;
+        width: 28px;
+        height: 28px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: rgba(255, 255, 255, 0.92);
+        filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
+      }
+      .jb-result-status .track-row__status-svg {
+        display: block;
+      }
+      .jb-result-status .track-row__status-svg--spin {
+        transform-origin: 12px 12px;
+        animation: jb-queue-status-spin 0.85s linear infinite;
+      }
+      .jb-result-blocked--icon-only {
+        width: 28px;
+        height: 28px;
+        min-height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        align-self: center;
+        color: rgba(255, 255, 255, 0.92);
+        filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
+      }
+      .jb-result-blocked--icon-only .track-row__status-svg {
+        display: block;
+      }
+      .jb-result-blocked--icon-only .track-row__status-svg--spin {
+        transform-origin: 12px 12px;
+        animation: jb-queue-status-spin 0.85s linear infinite;
+      }
+      .jb-result-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        flex-shrink: 0;
+      }
+      .jb-result-actions button {
+        min-height: 40px;
+        padding: 0 14px;
+        border-radius: 10px;
+        border: 1px solid #3f3f46;
+        background: #27272a;
+        color: #fafafa;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .jb-result-actions button.primary {
+        background: #e4e4e7;
+        color: #18181b;
+        border-color: #e4e4e7;
+      }
+      .jb-chip-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 16px;
+      }
+      .jb-chip {
+        min-height: 44px;
+        padding: 0 14px;
+        border-radius: 999px;
+        border: 1px solid #3f3f46;
+        background: #27272a;
+        color: #fafafa;
+        font-size: 14px;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .jb-chip img {
+        width: 32px;
+        height: 32px;
+        border-radius: 6px;
+        object-fit: cover;
+      }
+      .jb-err {
+        color: #f87171;
+        font-size: 14px;
+        padding: 6px 8px;
+        margin: 0;
+        flex-shrink: 0;
+      }
+      .jb-toast {
+        position: fixed;
+        left: 50%;
+        transform: translateX(-50%);
+        bottom: calc(var(--jb-search-h) + var(--jb-safe-bottom) + 10px);
+        z-index: 55;
+        max-width: min(420px, calc(100vw - 28px));
+        padding: 12px 18px;
+        border-radius: 12px;
+        background: #27272a;
+        border: 1px solid #52525b;
+        color: #fafafa;
+        font-size: 14px;
+        line-height: 1.35;
+        text-align: center;
+        box-shadow: 0 10px 32px rgba(0, 0, 0, 0.5);
+        pointer-events: none;
+      }
+      .jb-toast[hidden] {
+        display: none !important;
+      }
+      #audioEl {
+        position: absolute;
+        width: 0;
+        height: 0;
+        opacity: 0;
+        pointer-events: none;
+      }
+      .jb-card-sheet {
+        position: fixed;
+        inset: 0;
+        z-index: 60;
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+        padding: var(--jb-inset);
+        padding-bottom: max(var(--jb-inset), var(--jb-safe-bottom));
+      }
+      .jb-card-sheet[hidden] {
+        display: none !important;
+      }
+      .jb-card-sheet__backdrop {
+        position: absolute;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.55);
+      }
+      .jb-card-sheet__panel {
+        position: relative;
+        width: 100%;
+        max-width: 400px;
+        background: #18181b;
+        border: 1px solid #3f3f46;
+        border-radius: 16px;
+        padding: 18px 16px 16px;
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+      }
+      .jb-card-sheet__title {
+        margin: 0 0 14px;
+        font-size: 0.95rem;
+        font-weight: 600;
+        line-height: 1.3;
+        color: #fafafa;
+      }
+      .jb-card-sheet__actions {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 10px;
+      }
+      .jb-card-sheet__actions button {
+        flex: 1;
+        min-height: 52px;
+        border-radius: 12px;
+        border: 1px solid #3f3f46;
+        background: #27272a;
+        color: #fafafa;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        font-family: inherit;
+      }
+      .jb-card-sheet__actions button svg {
+        width: 22px;
+        height: 22px;
+        opacity: 0.95;
+      }
+      .jb-card-sheet__actions button.primary {
+        background: #e4e4e7;
+        color: #18181b;
+        border-color: #e4e4e7;
+      }
+      .jb-card-sheet__cancel {
+        width: 100%;
+        margin-top: 4px;
+        min-height: 44px;
+        border-radius: 10px;
+        border: none;
+        background: transparent;
+        color: #a1a1aa;
+        font-size: 15px;
+        cursor: pointer;
+        font-family: inherit;
+      }
+
+      /* Narrow: stack player + queue; history hidden; capped queue height scrolls inside */
+      @media (max-width: 768px) {
+        .jb-top-region {
+          flex: 0 0 auto;
+          min-height: auto;
+        }
+        .jb-top-grid {
+          flex: 0 0 auto;
+          min-height: auto;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 12px;
+        }
+        .jb-side {
+          max-width: none;
+        }
+        .jb-side .jb-queue-scroll {
+          max-height: none;
+        }
+        .jb-side--queue {
+          order: 2;
+          width: 100%;
+          max-width: none;
+          height: auto;
+          max-height: min(220px, 30vh);
+          opacity: 1;
+          padding: 0 4px;
+        }
+        .jb-now {
+          order: 1;
+          width: min(100%, var(--jb-now-edge-cap), calc(100vw - 32px));
+          align-self: center;
+        }
+        .jb-mid {
+          flex: 1 1 0;
+          min-height: 0;
+        }
+        .jb-row-block {
+          flex: 0 0 auto;
+          min-height: auto;
+          overflow: visible;
+        }
+        .jb-side--history {
+          display: none;
+        }
+        .jb-menu-wrap {
+          right: 2px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="jbLoadingOverlay"
+      class="jb-loading-overlay"
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+    >
+      <p class="jb-loading-overlay__text">Loading jukebox…</p>
+    </div>
+    <div class="jb-shell">
+      <div class="jb-layout">
+        <header class="jb-top-region">
+          <div class="jb-menu-wrap">
+            <div class="jb-top-bar-actions">
+              <button
+                type="button"
+                class="jb-cast-main-btn"
+                id="castMainBtn"
+                hidden
+                aria-label="Chromecast"
+                title="Chromecast"
+              >
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path
+                    d="M1 18v3h3c0-1.66-1.34-3-3-3zm0-4v2a9 9 0 0 1 9 9h2c0-6.08-4.93-11-11-11zm0-4v2c7.73 0 14 6.27 14 14h2c0-8.84-7.16-16-16-16zm20-8H3c-1.1 0-2 .9-2 2v3h2V6h16v12h-6v2h6c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"
+                  />
+                </svg>
+              </button>
+              <button type="button" class="jb-menu-btn" id="menuBtn" aria-expanded="false" aria-haspopup="true">⋯</button>
+            </div>
+            <div class="jb-menu-panel" id="menuPanel" role="menu">
+              <button type="button" id="closeJbBtn" role="menuitem">Close jukebox</button>
+            </div>
+          </div>
+          <div class="jb-top-grid">
+            <aside class="jb-side jb-side--queue" aria-label="Up next">
+              <h3 id="queueHeading">Up Next</h3>
+              <div class="jb-queue-scroll" id="queuePreview"></div>
+            </aside>
+            <section class="jb-now" aria-label="Now playing">
+              <div class="jb-cover-wrap">
+                <div class="jb-cover-stack" id="npCoverStack">
+                  <div class="jb-cover-bg is-empty" id="npCoverBg" aria-hidden="true"></div>
+                  <div class="jb-cover-frame">
+                    <img
+                      class="jb-cover-img"
+                      id="npCover"
+                      alt=""
+                      decoding="async"
+                      src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64'%3E%3Crect fill='%2327272a' width='64' height='64' rx='8'/%3E%3C/svg%3E"
+                    />
+                    <div class="jb-cover-meta">
+                      <h2 id="npTitle">—</h2>
+                      <p id="npArtist">—</p>
+                      <p id="npCastLine" class="jb-cast-line" hidden>Casting to</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="jb-ctrl-row">
+                <button type="button" class="jb-play" id="npPlayBtn" aria-label="Play or pause">
+                  <svg id="npPlayIcon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+                </button>
+                <button type="button" class="jb-skip" id="npSkipBtn" aria-label="Skip track" title="Skip">
+                  <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <path d="M6 18l8.5-6L6 6v12zm8.5 0V6l8.5 6-8.5 6z"/>
+                  </svg>
+                </button>
+                <div class="jb-vol-pop">
+                  <button
+                    type="button"
+                    class="jb-vol-toggle"
+                    id="volToggleBtn"
+                    aria-label="Volume"
+                    aria-expanded="false"
+                    aria-controls="volPanel"
+                  >
+                    <svg id="volToggleIcon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                      <path
+                        d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"
+                      />
+                    </svg>
+                  </button>
+                  <div class="jb-vol-panel" id="volPanel" role="group" aria-label="Volume level" hidden>
+                    <input type="range" id="volSlider" min="0" max="100" value="100" />
+                  </div>
+                </div>
+                <div class="jb-progress-cluster">
+                  <span class="jb-time" id="npTimeCur">0:00</span>
+                  <div class="jb-progress-rail" role="progressbar" aria-valuemin="0" aria-valuemax="1000" aria-valuenow="0" id="npProgressRail">
+                    <div class="jb-progress-fill" id="npProgressFill"></div>
+                  </div>
+                  <span class="jb-time" id="npTimeDur">0:00</span>
+                </div>
+              </div>
+            </section>
+            <aside class="jb-side jb-side--history" aria-label="Recently played">
+              <h3 id="historyHeading">Recently Played</h3>
+              <div class="jb-queue-scroll" id="historyPreview"></div>
+            </aside>
+          </div>
+        </header>
+
+        <p id="globalErr" class="jb-err" hidden></p>
+
+        <main class="jb-mid" id="jbMiddle">
+          <section class="jb-row-block">
+            <h3>Most Popular</h3>
+            <div class="jb-cards" id="topTracksList" role="list"></div>
+          </section>
+          <section class="jb-row-block">
+            <h3>Fresh Tracks</h3>
+            <div class="jb-cards" id="freshTracksList" role="list"></div>
+          </section>
+          <section class="jb-row-block">
+            <h3>Recent Mix</h3>
+            <div class="jb-cards" id="recentMixList" role="list"></div>
+          </section>
+        </main>
+      </div>
+
+      <div id="jbToast" class="jb-toast" hidden role="status" aria-live="polite" aria-atomic="true"></div>
+
+      <div class="jb-search-bar">
+        <div class="jb-search-bar__inner">
+          <input type="search" id="searchQ" placeholder="Search tracks…" enterkeyhint="search" autocomplete="off" />
+        </div>
+      </div>
+
+      <div class="jb-sheet" id="searchSheet" aria-hidden="true">
+        <div class="jb-sheet-head">
+          <button type="button" class="jb-sheet-back" id="sheetBackBtn" hidden>← Back</button>
+          <div class="jb-sheet-title" id="sheetTitle">Search</div>
+          <button type="button" class="jb-sheet-close" id="sheetCloseBtn" aria-label="Close search">×</button>
+        </div>
+        <div class="jb-sheet-body" id="sheetBody"></div>
+      </div>
+
+      <div id="cardActionSheet" class="jb-card-sheet" hidden>
+        <div class="jb-card-sheet__backdrop" id="cardActionBackdrop"></div>
+        <div class="jb-card-sheet__panel" role="dialog" aria-modal="true" aria-labelledby="cardActionTitle">
+          <p class="jb-card-sheet__title" id="cardActionTitle">Track</p>
+          <div class="jb-card-sheet__actions">
+            <button type="button" class="primary" id="cardActionQueue" title="Add to queue">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M12 5v14M5 12h14"/>
+              </svg>
+              Add to queue
+            </button>
+            <button type="button" id="cardActionNext" title="Play next">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M4 6v12M12 6v12M12 6l8 6-8 6"/>
+              </svg>
+              Play next
+            </button>
+          </div>
+          <button type="button" class="jb-card-sheet__cancel" id="cardActionCancel">Cancel</button>
+        </div>
+      </div>
+    </div>
+    <audio id="audioEl" playsinline preload="metadata" disableremoteplayback></audio>
+    <script type="module" src="/src/pages/jukebox-guest-page.js"></script>
+  </body>
+</html>

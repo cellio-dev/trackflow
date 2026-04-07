@@ -1,0 +1,15 @@
+{
+  "name": "trackflow-frontend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "npm run icons && vite build",
+    "preview": "vite preview",
+    "icons": "node scripts/generate-pwa-icons.mjs"
+  },
+  "devDependencies": {
+    "sharp": "^0.33.5",
+    "vite": "^6.2.0"
+  }
+}

@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en" class="app-layout">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0A0E17" />
+    <link rel="stylesheet" href="/src/css/app-shell.css" />
+    <title>Edit Jukebox · TrackFlow</title>
+    <style>
+      .container {
+        box-sizing: border-box;
+        width: 100%;
+        margin: 0;
+        padding: 24px 16px 48px;
+      }
+
+      @media (min-width: 640px) {
+        .container {
+          padding-left: 24px;
+          padding-right: 24px;
+        }
+      }
+
+      @media (min-width: 1024px) {
+        .container {
+          padding-left: 32px;
+          padding-right: 32px;
+        }
+      }
+
+      .jb-edit-shell {
+        box-sizing: border-box;
+        width: 100%;
+        max-width: 520px;
+        margin: 0 auto;
+      }
+      .field {
+        margin-bottom: 16px;
+      }
+      .field label {
+        display: block;
+        font-size: 13px;
+        font-weight: 600;
+        margin-bottom: 6px;
+        color: #d4d4d8;
+      }
+      .field input[type='text'],
+      .field input[type='password'],
+      .field select {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 10px 12px;
+        border-radius: 8px;
+        border: 1px solid #3f3f46;
+        background: #09090b;
+        color: #fafafa;
+      }
+      .field label.inline {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 500;
+      }
+      .actions {
+        display: flex;
+        gap: 12px;
+        margin-top: 24px;
+      }
+      .actions button {
+        padding: 10px 18px;
+        border-radius: 8px;
+        font-weight: 600;
+        border: none;
+        cursor: pointer;
+      }
+      .actions button.primary {
+        background: #fafafa;
+        color: #18181b;
+      }
+      .msg {
+        margin-top: 12px;
+        font-size: 14px;
+        color: #f87171;
+      }
+    </style>
+  </head>
+  <body class="app-layout">
+    <div class="app-shell">
+      <aside class="app-sidebar" aria-label="Main navigation">
+        <a href="/index.html" class="app-sidebar__brand" aria-label="TrackFlow home">
+          <img class="app-sidebar__logo" src="/trackflow-logo.svg" width="384" height="60" alt="" decoding="async" />
+        </a>
+        <nav class="app-sidebar__nav">
+          <a href="/index.html" class="app-nav-item" aria-label="Discover">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            <span class="app-nav-item__label">Discover</span>
+          </a>
+          <a href="/following.html" class="app-nav-item" aria-label="Following">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>
+            <span class="app-nav-item__label">Following</span>
+          </a>
+          <a href="/requests.html" class="app-nav-item" aria-label="Requests">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M15 2H9a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V3a1 1 0 0 0-1-1z"/><path d="M9 12h6"/><path d="M9 16h6"/></svg>
+            <span class="app-nav-item__label">Requests</span>
+          </a>
+          <a href="/jukebox.html" class="app-nav-item app-nav-item--active" aria-current="page" aria-label="Jukebox">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
+            <span class="app-nav-item__label">Jukebox</span>
+          </a>
+          <a href="/settings.html" class="app-nav-item" aria-label="Settings" hidden>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+            <span class="app-nav-item__label">Settings</span>
+          </a>
+        </nav>
+      </aside>
+      <main class="app-main">
+        <div class="container">
+          <div class="search-row" data-app-top-search>
+            <div class="search-field">
+              <span class="search-field__icon" aria-hidden="true">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+              </span>
+              <input type="text" placeholder="Search artists, albums, tracks &amp; playlists" aria-label="Search" />
+            </div>
+          </div>
+          <div class="jb-edit-shell">
+          <div class="top-links">
+            <button type="button" id="backNavButton" class="back-link" aria-label="Back">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+            </button>
+          </div>
+          <h1 style="margin-top: 0" id="editTitle">New jukebox</h1>
+          <form id="jukeboxForm">
+            <div class="field">
+              <label for="jbName">Name</label>
+              <input id="jbName" type="text" required autocomplete="off" />
+            </div>
+            <div class="field">
+              <label for="jbPartyPl">Party playlist (optional)</label>
+              <select id="jbPartyPl">
+                <option value="">— None —</option>
+              </select>
+            </div>
+            <div class="field">
+              <label class="inline"><input id="jbLoop" type="checkbox" /> Enable playlist loop</label>
+            </div>
+            <div class="field">
+              <label for="jbPin">PIN (optional, for restricted actions)</label>
+              <input id="jbPin" type="password" autocomplete="new-password" placeholder="Leave blank to keep / none" />
+            </div>
+            <div class="field">
+              <label class="inline"><input id="jbPinNext" type="checkbox" /> Require PIN for Play next</label>
+            </div>
+            <div class="field">
+              <label class="inline"><input id="jbPinSkip" type="checkbox" /> Require PIN for Skip track</label>
+            </div>
+            <div class="field">
+              <label class="inline"><input id="jbPinClose" type="checkbox" /> Require PIN for Close jukebox</label>
+            </div>
+            <div class="field">
+              <label for="jbGuestQueueLimit">Guest screen: max queue tracks shown (Up Next)</label>
+              <input id="jbGuestQueueLimit" type="number" min="3" max="50" step="1" inputmode="numeric" value="15" />
+            </div>
+            <div class="field">
+              <label for="jbGuestHistoryLimit">Guest screen: max history tracks shown (Recently played)</label>
+              <input id="jbGuestHistoryLimit" type="number" min="3" max="50" step="1" inputmode="numeric" value="15" />
+            </div>
+            <div class="actions">
+              <button type="submit" class="primary" id="saveBtn">Save</button>
+              <button type="button" id="cancelBtn">Cancel</button>
+            </div>
+            <p id="formMsg" class="msg" role="alert" hidden></p>
+          </form>
+          </div>
+        </div>
+      </main>
+    </div>
+    <script type="module" src="/src/pages/jukebox-edit-page.js"></script>
+  </body>
+</html>

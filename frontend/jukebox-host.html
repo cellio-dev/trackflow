@@ -1,0 +1,621 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#09090b" />
+    <title>Jukebox · Control Panel</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --jb-search-h: 72px;
+        --jb-safe-bottom: env(safe-area-inset-bottom, 0px);
+        --jb-safe-top: env(safe-area-inset-top, 0px);
+        --jb-touch-min: 48px;
+        --jb-inset: 16px;
+        --jb-frame: #27272a;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        height: 100%;
+        height: 100dvh;
+      }
+      body {
+        margin: 0;
+        height: 100%;
+        height: 100dvh;
+        max-height: 100dvh;
+        display: flex;
+        flex-direction: column;
+        font-family: system-ui, sans-serif;
+        background: #09090b;
+        color: #e4e4e7;
+        padding: 16px var(--jb-inset);
+        padding-top: max(16px, var(--jb-safe-top));
+        padding-bottom: calc(var(--jb-search-h) + var(--jb-safe-bottom) + 24px);
+        overflow: hidden;
+      }
+      .jh-shell {
+        flex: 1 1 0;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        overflow: hidden;
+      }
+      .jh-head {
+        position: relative;
+        padding-right: 52px;
+        margin-bottom: 16px;
+        flex-shrink: 0;
+      }
+      .jh-head h1 {
+        margin: 0;
+        font-size: 1.15rem;
+        font-weight: 700;
+        line-height: 1.25;
+      }
+      .jh-close {
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: var(--jb-touch-min);
+        height: var(--jb-touch-min);
+        margin: 0;
+        padding: 0;
+        border-radius: 12px;
+        border: 1px solid #3f3f46;
+        background: #27272a;
+        color: #fafafa;
+        font-size: 1.35rem;
+        line-height: 1;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .jh-close:hover {
+        background: #3f3f46;
+      }
+      .jh-toolbar {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        margin-bottom: 16px;
+        flex-shrink: 0;
+      }
+      .jh-queue-block {
+        flex: 1 1 0;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+      .jh-ctrl-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      .jb-play,
+      .jb-skip {
+        width: 36px;
+        height: 36px;
+        padding: 0;
+        border-radius: 50%;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+      }
+      .jb-play {
+        border: none;
+        background: #fafafa;
+        color: #18181b;
+      }
+      .jb-skip {
+        border: 1px solid #3f3f46;
+        background: #27272a;
+        color: #fafafa;
+      }
+      .jb-skip svg {
+        width: 18px;
+        height: 18px;
+      }
+      .jb-play svg {
+        width: 20px;
+        height: 20px;
+      }
+      .jh-host-vol {
+        display: flex;
+        align-items: center;
+        flex-shrink: 0;
+      }
+      .jh-host-vol input[type='range'] {
+        display: block;
+        width: 179px;
+        min-width: 179px;
+        height: 8px;
+        margin: 0;
+        accent-color: #a78bfa;
+        cursor: pointer;
+      }
+      #btnClearQueue {
+        min-height: 36px;
+        padding: 0 12px;
+        border-radius: 10px;
+        border: 1px solid #3f3f46;
+        background: #27272a;
+        color: #fafafa;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        align-self: center;
+      }
+      #btnClearQueue:hover {
+        background: #3f3f46;
+      }
+      .jh-queue-h {
+        margin: 0 0 8px;
+        font-size: 0.68rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #71717a;
+        flex-shrink: 0;
+      }
+      #queueHost.jb-queue-scroll {
+        flex: 1 1 0;
+        min-height: 0;
+        max-height: none;
+      }
+      .jb-queue-scroll {
+        overflow-x: hidden;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        padding-right: 2px;
+        overscroll-behavior: contain;
+        scrollbar-width: thin;
+        scrollbar-color: #3f3f46 #18181b;
+      }
+      .jb-queue-scroll::-webkit-scrollbar {
+        width: 6px;
+      }
+      .jb-queue-scroll::-webkit-scrollbar-thumb {
+        background: #3f3f46;
+        border-radius: 6px;
+      }
+      .jb-queue-status {
+        flex-shrink: 0;
+        width: 26px;
+        height: 26px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: rgba(255, 255, 255, 0.92);
+        filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
+      }
+      .jb-queue-status .track-row__status-svg {
+        display: block;
+      }
+      .jb-queue-status .track-row__status-svg--spin {
+        transform-origin: 12px 12px;
+        animation: jb-queue-status-spin 0.85s linear infinite;
+      }
+      @keyframes jb-queue-status-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      .jb-queue-row--compact .jb-queue-status {
+        width: 22px;
+        height: 22px;
+      }
+      .jb-queue-row--compact .jb-queue-status svg {
+        width: 18px;
+        height: 18px;
+      }
+      .jb-queue-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 6px;
+        border-radius: 10px;
+        margin-bottom: 4px;
+      }
+      .jb-queue-row[draggable='true'] {
+        cursor: grab;
+      }
+      .jb-queue-row[draggable='true']:active {
+        cursor: grabbing;
+      }
+      .jb-queue-row--dragging {
+        opacity: 0.55;
+      }
+      .jb-queue-row--drag-over {
+        outline: 2px dashed #a78bfa;
+        outline-offset: 2px;
+        border-radius: 10px;
+      }
+      .jb-queue-row--next {
+        background: #27272a;
+        outline: 2px solid #a78bfa;
+        outline-offset: -2px;
+      }
+      .jb-queue-row--playing {
+        background: rgba(39, 39, 42, 0.75);
+        outline: 2px solid #22c55e;
+        outline-offset: -2px;
+      }
+      .jh-now-playing-badge {
+        display: inline-block;
+        margin-bottom: 4px;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 0.62rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+        color: #bbf7d0;
+        background: rgba(34, 197, 94, 0.2);
+        border: 1px solid rgba(34, 197, 94, 0.45);
+      }
+      .jb-queue-row--compact {
+        padding: 5px 6px;
+      }
+      .jb-queue-row--compact .jb-queue-art {
+        width: 36px;
+        height: 36px;
+      }
+      .jb-queue-row--compact .jb-queue-title {
+        font-size: 0.78rem;
+      }
+      .jb-queue-row--compact .jb-queue-artist {
+        font-size: 0.68rem;
+      }
+      .jb-queue-art {
+        width: 44px;
+        height: 44px;
+        border-radius: 8px;
+        object-fit: cover;
+        background: #3f3f46;
+        flex-shrink: 0;
+      }
+      .jb-queue-text {
+        min-width: 0;
+        flex: 1;
+      }
+      .jb-queue-title {
+        font-size: 0.82rem;
+        font-weight: 600;
+        line-height: 1.2;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        color: #d4d4d8;
+      }
+      .jb-queue-artist {
+        font-size: 0.72rem;
+        color: #a1a1aa;
+        margin-top: 2px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .jh-queue-actions {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: 6px;
+        flex-shrink: 0;
+      }
+      .jh-queue-actions button {
+        min-width: 32px;
+        min-height: 28px;
+        padding: 0 6px;
+        border-radius: 8px;
+        border: 1px solid #3f3f46;
+        background: #18181b;
+        color: #e4e4e7;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .jh-queue-actions button:hover {
+        background: #27272a;
+      }
+      .jb-search-bar {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        z-index: 50;
+        padding: 12px 0 calc(12px + var(--jb-safe-bottom));
+        background: #18181b;
+        border-top: 1px solid var(--jb-frame);
+        box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.35);
+      }
+      .jb-search-bar__inner {
+        width: 100%;
+        padding: 0 var(--jb-inset);
+        box-sizing: border-box;
+      }
+      .jb-search-bar input {
+        width: 100%;
+        min-height: 48px;
+        padding: 0 16px;
+        /* >=16px prevents iOS Safari from zooming the viewport on focus */
+        font-size: max(16px, 1.05rem);
+        border-radius: 14px;
+        border: 1px solid #3f3f46;
+        background: #09090b;
+        color: #fafafa;
+      }
+      .jb-sheet {
+        position: fixed;
+        left: 0;
+        right: 0;
+        top: max(0px, var(--jb-safe-top));
+        bottom: calc(var(--jb-search-h) + var(--jb-safe-bottom));
+        z-index: 30;
+        background: #0c0c0e;
+        border-top: 1px solid #27272a;
+        transform: translateY(100%);
+        transition: transform 0.22s ease-out;
+        display: flex;
+        flex-direction: column;
+      }
+      .jb-sheet.open {
+        transform: translateY(0);
+        z-index: 45;
+      }
+      .jb-sheet-head {
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 12px;
+        border-bottom: 1px solid #27272a;
+      }
+      .jb-sheet-title {
+        flex: 1;
+        font-size: 0.95rem;
+        font-weight: 600;
+        min-width: 0;
+      }
+      .jb-sheet-close {
+        min-width: var(--jb-touch-min);
+        min-height: var(--jb-touch-min);
+        border-radius: 12px;
+        border: 1px solid #3f3f46;
+        background: #27272a;
+        color: #fafafa;
+        font-size: 1.2rem;
+        cursor: pointer;
+      }
+      .jb-sheet-body {
+        flex: 1;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        padding: 8px 12px 16px;
+      }
+      .jb-result-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 10px;
+        border-radius: 14px;
+        margin-bottom: 8px;
+        background: #18181b;
+        border: 1px solid #27272a;
+      }
+      .jb-result-row img {
+        width: 56px;
+        height: 56px;
+        border-radius: 10px;
+        object-fit: cover;
+        background: #3f3f46;
+        flex-shrink: 0;
+      }
+      .jb-result-meta {
+        flex: 1;
+        min-width: 0;
+      }
+      .jb-result-meta .t {
+        font-weight: 600;
+        font-size: 0.95rem;
+      }
+      .jb-result-meta .a {
+        font-size: 0.8rem;
+        color: #a1a1aa;
+        margin-top: 4px;
+      }
+      .jb-result-status {
+        flex-shrink: 0;
+        width: 28px;
+        height: 28px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: rgba(255, 255, 255, 0.92);
+        filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
+      }
+      .jb-result-status .track-row__status-svg {
+        display: block;
+      }
+      .jb-result-status .track-row__status-svg--spin {
+        transform-origin: 12px 12px;
+        animation: jb-queue-status-spin 0.85s linear infinite;
+      }
+      @keyframes jb-queue-status-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      .jb-result-blocked {
+        font-size: 12px;
+        font-weight: 600;
+        color: #a1a1aa;
+        text-align: right;
+        max-width: 140px;
+        line-height: 1.35;
+      }
+      .jb-result-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        flex-shrink: 0;
+      }
+      .jb-result-actions button {
+        min-height: 40px;
+        padding: 0 14px;
+        border-radius: 10px;
+        border: 1px solid #3f3f46;
+        background: #27272a;
+        color: #fafafa;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .jb-result-actions button.primary {
+        background: #e4e4e7;
+        color: #18181b;
+        border-color: #e4e4e7;
+      }
+      .jb-toast {
+        position: fixed;
+        left: 50%;
+        transform: translateX(-50%);
+        bottom: calc(var(--jb-search-h) + var(--jb-safe-bottom) + 10px);
+        z-index: 55;
+        max-width: min(420px, calc(100vw - 28px));
+        padding: 12px 18px;
+        border-radius: 12px;
+        background: #27272a;
+        border: 1px solid #52525b;
+        color: #fafafa;
+        font-size: 14px;
+        line-height: 1.35;
+        text-align: center;
+        box-shadow: 0 10px 32px rgba(0, 0, 0, 0.5);
+        pointer-events: none;
+      }
+      .jb-toast[hidden] {
+        display: none !important;
+      }
+      .jh-shell.jh-search-open .jh-toolbar,
+      .jh-shell.jh-search-open .jh-np-progress-wrap,
+      .jh-shell.jh-search-open .jh-queue-block {
+        visibility: hidden;
+        pointer-events: none;
+      }
+      .jh-np-progress-wrap {
+        margin-bottom: 12px;
+        flex-shrink: 0;
+      }
+      .jh-np-progress-wrap[hidden] {
+        display: none !important;
+      }
+      .jh-np-progress-times {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 0.72rem;
+        font-variant-numeric: tabular-nums;
+        color: #a1a1aa;
+        margin-bottom: 6px;
+      }
+      .jh-np-progress-wrap input[type='range'] {
+        display: block;
+        width: 100%;
+        height: 10px;
+        margin: 0;
+        accent-color: #22c55e;
+        cursor: pointer;
+      }
+      .jh-np-progress-wrap input[type='range']:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="jh-shell" id="jhShell">
+      <div id="jbToast" class="jb-toast" hidden role="status" aria-live="polite" aria-atomic="true"></div>
+      <header class="jh-head">
+        <button type="button" class="jh-close" id="btnClose" aria-label="Close control panel">×</button>
+        <h1 id="hostTitle">Control Panel</h1>
+      </header>
+
+      <div class="jh-toolbar">
+        <div class="jh-ctrl-row">
+          <button type="button" class="jb-play" id="npPlayBtn" aria-label="Play or pause">
+            <svg id="npPlayIcon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+          </button>
+          <button type="button" class="jb-skip" id="npSkipBtn" aria-label="Skip track" title="Skip">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M6 18l8.5-6L6 6v12zm8.5 0V6l8.5 6-8.5 6z" />
+            </svg>
+          </button>
+          <button type="button" id="btnClearQueue">Clear queue</button>
+          <div class="jh-host-vol">
+            <input
+              type="range"
+              id="volRange"
+              min="0"
+              max="100"
+              value="100"
+              aria-label="Volume"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div class="jh-np-progress-wrap" id="jhNpProgressWrap" hidden>
+        <div class="jh-np-progress-times">
+          <span id="jhNpTimeCur">0:00</span>
+          <span id="jhNpTimeDur">0:00</span>
+        </div>
+        <input
+          type="range"
+          id="jhNpProgress"
+          min="0"
+          max="1000"
+          value="0"
+          step="1"
+          aria-label="Track position"
+        />
+      </div>
+
+      <div class="jh-queue-block">
+        <h2 class="jh-queue-h" id="queueHeading">Queue</h2>
+        <div class="jb-queue-scroll" id="queueHost"></div>
+      </div>
+
+      <div class="jb-search-bar">
+        <div class="jb-search-bar__inner">
+          <input
+            type="search"
+            id="hostSearchQ"
+            placeholder="Search tracks…"
+            enterkeyhint="search"
+            autocomplete="off"
+          />
+        </div>
+      </div>
+
+      <div class="jb-sheet" id="searchSheet" aria-hidden="true">
+        <div class="jb-sheet-head">
+          <div class="jb-sheet-title" id="sheetTitle">Search</div>
+          <button type="button" class="jb-sheet-close" id="sheetCloseBtn" aria-label="Close search">×</button>
+        </div>
+        <div class="jb-sheet-body" id="sheetBody"></div>
+      </div>
+    </div>
+
+    <script type="module" src="/src/pages/jukebox-host-page.js"></script>
+  </body>
+</html>

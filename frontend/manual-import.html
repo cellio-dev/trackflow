@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en" class="app-layout">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0A0E17" />
+    <link rel="stylesheet" href="/src/css/app-shell.css" />
+    <title>Manual import · TrackFlow</title>
+    <style>
+      .mi-wrap {
+        box-sizing: border-box;
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 20px 16px 40px;
+      }
+      .mi-wrap h1 {
+        margin: 0 0 8px;
+        font-size: 1.35rem;
+      }
+      .mi-lead {
+        margin: 0 0 20px;
+        color: var(--tf-muted, #a1a1aa);
+        font-size: 0.95rem;
+      }
+      .mi-section {
+        margin-top: 22px;
+        padding: 16px;
+        border: 1px solid var(--tf-border, #27272a);
+        border-radius: 10px;
+        background: var(--tf-surface, #18181b);
+      }
+      .mi-section h2 {
+        margin: 0 0 12px;
+        font-size: 1rem;
+      }
+      .mi-row {
+        margin-top: 10px;
+      }
+      .mi-label {
+        display: block;
+        font-weight: 600;
+        margin-bottom: 6px;
+        font-size: 0.9rem;
+      }
+      .mi-search-row {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .mi-search-row input[type='text'] {
+        flex: 1;
+        min-width: 160px;
+        padding: 8px 10px;
+        border-radius: 8px;
+        border: 1px solid var(--tf-border, #27272a);
+        background: #09090b;
+        color: inherit;
+      }
+      .mi-btn {
+        padding: 8px 14px;
+        border-radius: 8px;
+        border: 1px solid var(--tf-border, #27272a);
+        background: #27272a;
+        color: inherit;
+        cursor: pointer;
+        font-size: 0.9rem;
+      }
+      .mi-btn:hover:not(:disabled) {
+        background: #3f3f46;
+      }
+      .mi-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      .mi-btn--primary {
+        background: #4f46e5;
+        border-color: #4f46e5;
+        color: #fff;
+      }
+      .mi-btn--primary:hover:not(:disabled) {
+        background: #6366f1;
+      }
+      .mi-results {
+        margin-top: 12px;
+        max-height: 220px;
+        overflow-y: auto;
+        border: 1px solid var(--tf-border, #27272a);
+        border-radius: 8px;
+      }
+      .mi-track {
+        display: block;
+        width: 100%;
+        text-align: left;
+        padding: 10px 12px;
+        border: none;
+        border-bottom: 1px solid var(--tf-border, #27272a);
+        background: transparent;
+        color: inherit;
+        cursor: pointer;
+        font-size: 0.88rem;
+      }
+      .mi-track:last-child {
+        border-bottom: none;
+      }
+      .mi-track:hover {
+        background: rgba(255, 255, 255, 0.04);
+      }
+      .mi-track.is-selected {
+        background: rgba(79, 70, 229, 0.2);
+      }
+      .mi-track__title {
+        font-weight: 600;
+      }
+      .mi-track__sub {
+        color: var(--tf-muted, #a1a1aa);
+        font-size: 0.82rem;
+        margin-top: 2px;
+      }
+      .mi-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+      @media (max-width: 560px) {
+        .mi-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+      .mi-meta {
+        font-size: 0.88rem;
+        line-height: 1.5;
+      }
+      .mi-meta dt {
+        font-weight: 600;
+        margin-top: 8px;
+        color: var(--tf-muted, #a1a1aa);
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .mi-meta dd {
+        margin: 4px 0 0;
+      }
+      .mi-msg {
+        margin-top: 12px;
+        padding: 10px 12px;
+        border-radius: 8px;
+        font-size: 0.9rem;
+      }
+      .mi-msg--ok {
+        background: rgba(34, 197, 94, 0.15);
+        border: 1px solid rgba(34, 197, 94, 0.35);
+      }
+      .mi-msg--err {
+        background: rgba(239, 68, 68, 0.12);
+        border: 1px solid rgba(239, 68, 68, 0.35);
+      }
+      .mi-filename {
+        font-size: 0.85rem;
+        color: var(--tf-muted, #a1a1aa);
+        margin-top: 6px;
+        word-break: break-all;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app-shell app-shell--minimal">
+      <main class="app-main">
+        <div class="mi-wrap">
+          <div class="top-links">
+            <button type="button" class="back-link" aria-label="Back">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+            </button>
+          </div>
+          <h1>Manual import</h1>
+          <p class="mi-lead">
+            Choose an audio file, match it to a Deezer track, then import into your library with the same tagging, naming, and
+            database steps as after a download.
+          </p>
+
+          <div class="mi-section">
+            <h2>1. Audio file</h2>
+            <input id="miFile" type="file" accept=".mp3,.flac,.m4a,.aac,.ogg,.opus,.wav,.wma,.aif,.aiff,audio/*" />
+            <p id="miFileHint" class="mi-filename" hidden></p>
+            <div class="mi-row">
+              <button type="button" class="mi-btn" id="miAnalyzeBtn" disabled>Analyze file</button>
+            </div>
+          </div>
+
+          <div class="mi-section">
+            <h2>2. Match on Deezer</h2>
+            <label class="mi-label" for="miSearch">Search tracks</label>
+            <div class="mi-search-row">
+              <input id="miSearch" type="text" placeholder="Artist and title" autocomplete="off" spellcheck="false" />
+              <button type="button" class="mi-btn" id="miSearchBtn">Search</button>
+            </div>
+            <div id="miResults" class="mi-results" hidden role="listbox" aria-label="Deezer search results"></div>
+          </div>
+
+          <div class="mi-section" id="miSummarySection" hidden>
+            <h2>3. Summary</h2>
+            <div class="mi-grid">
+              <div>
+                <h3 class="mi-label" style="margin-bottom: 8px">File (current tags)</h3>
+                <dl class="mi-meta" id="miFileSummary"></dl>
+              </div>
+              <div>
+                <h3 class="mi-label" style="margin-bottom: 8px">Deezer (target)</h3>
+                <dl class="mi-meta" id="miDeezerSummary"></dl>
+              </div>
+            </div>
+            <div class="mi-row" style="margin-top: 16px">
+              <button type="button" class="mi-btn mi-btn--primary" id="miConfirmBtn" disabled>Import into library</button>
+            </div>
+          </div>
+
+          <p id="miMessage" class="mi-msg" hidden role="status"></p>
+        </div>
+      </main>
+    </div>
+    <script type="module" src="/src/pages/manual-import-page.js"></script>
+  </body>
+</html>

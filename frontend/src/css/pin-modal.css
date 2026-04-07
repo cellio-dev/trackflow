@@ -1,0 +1,229 @@
+/* Prevent background scroll while PIN modal is open */
+html.tf-pin-modal-open {
+  overflow: hidden;
+}
+
+/* Full-screen PIN entry — reusable (jukebox guest, future host flows). */
+.tf-pin-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+.tf-pin-modal[hidden] {
+  display: none !important;
+}
+
+.tf-pin-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.88);
+  /* Block taps to content behind; do not dismiss on tap */
+  pointer-events: auto;
+}
+
+.tf-pin-modal__panel {
+  position: relative;
+  flex: 1;
+  margin: 0;
+  width: 100%;
+  max-width: 100%;
+  min-height: min(100dvh, 100vh);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: clamp(16px, 4vmin, 24px);
+  padding: max(24px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right))
+    max(24px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
+  border-radius: 0;
+  background: #18181b;
+  border: none;
+  box-shadow: none;
+  transform-origin: center center;
+}
+
+@keyframes tf-pin-modal-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20%,
+  60% {
+    transform: translateX(-10px);
+  }
+  40%,
+  80% {
+    transform: translateX(10px);
+  }
+}
+
+.tf-pin-modal__panel.tf-pin-modal__panel--shake {
+  animation: tf-pin-modal-shake 0.45s ease;
+}
+
+.tf-pin-modal__title {
+  margin: 0;
+  font-size: clamp(1.25rem, 4.5vmin, 1.6rem);
+  font-weight: 650;
+  line-height: 1.25;
+  text-align: center;
+  color: #fafafa;
+  padding: 0 8px;
+}
+
+.tf-pin-modal__dots {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  min-height: 18px;
+}
+
+.tf-pin-modal__dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #3f3f46;
+  transition: background 0.12s ease, transform 0.12s ease;
+}
+
+.tf-pin-modal__dot--filled {
+  background: #a1a1aa;
+  transform: scale(1.08);
+}
+
+.tf-pin-modal__error {
+  margin: 0;
+  min-height: 1.35em;
+  font-size: 0.95rem;
+  text-align: center;
+  color: #f87171;
+  font-weight: 500;
+}
+
+.tf-pin-modal__error:empty {
+  visibility: hidden;
+}
+
+.tf-pin-modal__keys {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: clamp(10px, 2.5vmin, 16px);
+  flex: 0 0 auto;
+  max-width: 400px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.tf-pin-modal__key {
+  min-height: clamp(56px, 14vmin, 72px);
+  min-width: 0;
+  padding: 0;
+  border: none;
+  border-radius: 14px;
+  font-size: clamp(1.35rem, 5vmin, 1.75rem);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: #fafafa;
+  background: #27272a;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tf-pin-modal__key:active {
+  background: #3f3f46;
+  transform: scale(0.97);
+}
+
+.tf-pin-modal__key:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.tf-pin-modal__key--wide {
+  grid-column: span 1;
+}
+
+.tf-pin-modal__key--icon {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.tf-pin-modal__actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 4px;
+  max-width: 400px;
+  width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.tf-pin-modal__btn {
+  flex: 1;
+  min-height: 52px;
+  border-radius: 14px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tf-pin-modal__btn--secondary {
+  border: 1px solid #52525b;
+  background: transparent;
+  color: #e4e4e7;
+}
+
+.tf-pin-modal__btn--secondary:active {
+  background: #27272a;
+}
+
+.tf-pin-modal__btn--primary {
+  border: none;
+  background: #6366f1;
+  color: #fff;
+}
+
+.tf-pin-modal__btn--primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.tf-pin-modal__btn--primary:not(:disabled):active {
+  filter: brightness(1.08);
+}
+
+.tf-pin-modal__btn--loading {
+  position: relative;
+  color: transparent !important;
+  pointer-events: none;
+}
+
+.tf-pin-modal__btn--loading::after {
+  content: '';
+  position: absolute;
+  inset: 50% auto auto 50%;
+  width: 22px;
+  height: 22px;
+  margin: -11px 0 0 -11px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: tf-pin-modal-spin 0.65s linear infinite;
+}
+
+@keyframes tf-pin-modal-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
