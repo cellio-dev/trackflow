@@ -6,10 +6,7 @@ const { getDb } = require('../db');
 const { approveRequestById, dropPendingDownloadsForRequestIds } = require('../services/requestApproval');
 const { runAutoAcquire } = require('../services/autoAcquire');
 const slskd = require('../services/slskd');
-const {
-  getAvailabilitySettingsSync,
-  enrichRequestRowWithLibraryMatch,
-} = require('../services/libraryAvailability');
+const { enrichRequestRowWithLibraryMatch } = require('../services/libraryAvailability');
 const { findPresentTrackForProbe } = require('../services/tracksDb');
 const { enrichRequestRow } = require('../services/requestDisplayStatus');
 const { usernamesByIds, usernameForId } = require('../services/userDisplay');
@@ -19,7 +16,7 @@ const router = express.Router();
 const db = getDb();
 
 const getRequestByIdStmt = db.prepare(`
-  SELECT id, deezer_id, title, artist, album, user_id, status, duration_seconds, cancelled, plex_status, processing_phase, created_at, request_type
+  SELECT id, deezer_id, title, artist, album, user_id, status, duration_seconds, cancelled, processing_phase, created_at, request_type
   FROM requests
   WHERE id = ?
 `);
@@ -36,15 +33,9 @@ const setCancelledFailedStmt = db.prepare(`
   WHERE id = ?
 `);
 
-const setCompletedPendingPlexStmt = db.prepare(`
+const setCompletedFromLibraryStmt = db.prepare(`
   UPDATE requests
-  SET status = 'completed', plex_status = 'pending', cancelled = 0, processing_phase = NULL
-  WHERE id = ?
-`);
-
-const setCompletedPlexFoundStmt = db.prepare(`
-  UPDATE requests
-  SET status = 'completed', plex_status = 'found', cancelled = 0, processing_phase = NULL
+  SET status = 'completed', cancelled = 0, processing_phase = NULL
   WHERE id = ?
 `);
 
@@ -138,47 +129,27 @@ router.post('/requests/:id/cancel', async (req, res) => {
       return res.status(400).json({ error: 'Request is not processing' });
     }
 
-    // Download may already be in the library / Plex while status is still "processing".
+    // Download may already be on disk while status is still "processing".
     try {
-      const settings = getAvailabilitySettingsSync();
       const match = findPresentTrackForProbe({
         deezer_id: existing.deezer_id,
         artist: existing.artist,
         title: existing.title,
         duration_seconds: existing.duration_seconds,
       });
-      const inPlex = match && Number(match.plex_available) === 1;
       const onDisk = match && Number(match.db_exists) === 1;
-      if (settings.plex_integration_enabled && inPlex) {
-        setCompletedPlexFoundStmt.run(requestId);
-        const updated = getRequestByIdStmt.get(requestId);
-        const withLib = await enrichRequestRowWithLibraryMatch(updated);
-        console.log(
-          'admin cancel: track in Plex (DB) — marked completed + plex found instead of cancel:',
-          requestId,
-        );
-        return res.json({
-          ...enrichRequestRow(withLib),
-          resolvedAs: 'completed',
-          plex_status: 'found',
-        });
-      }
       if (onDisk) {
-        setCompletedPendingPlexStmt.run(requestId);
+        setCompletedFromLibraryStmt.run(requestId);
         const updated = getRequestByIdStmt.get(requestId);
         const withLib = await enrichRequestRowWithLibraryMatch(updated);
-        console.log(
-          'admin cancel: file on disk (tracks DB) — marked completed + plex pending instead of cancel:',
-          requestId,
-        );
+        console.log('admin cancel: file in library (tracks DB) — marked completed instead of cancel:', requestId);
         return res.json({
           ...enrichRequestRow(withLib),
           resolvedAs: 'completed',
-          plex_status: 'pending',
         });
       }
-    } catch (plexErr) {
-      console.warn('admin cancel: library/Plex DB check failed, proceeding with cancel:', plexErr?.message);
+    } catch (libErr) {
+      console.warn('admin cancel: library DB check failed, proceeding with cancel:', libErr?.message);
     }
 
     setCancelledFailedStmt.run(requestId);

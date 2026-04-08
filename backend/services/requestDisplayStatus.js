@@ -1,14 +1,11 @@
 /**
  * User-facing status labels for requests (Discover vs Requests page).
- * Availability follows library file matching + optional Plex (see libraryAvailability.isUserFacingLibraryAvailable).
+ * Availability follows library file matching (filesystem scan / tracks.db_exists).
  */
 
+const { isUserFacingLibraryAvailable } = require('./libraryAvailability');
+
 const { getDb } = require('../db');
-const {
-  isUserFacingLibraryAvailable,
-  getAvailabilitySettingsSync,
-  isPlexAvailabilityActive,
-} = require('./libraryAvailability');
 
 const db = getDb();
 
@@ -25,7 +22,7 @@ const clearProcessingPhaseStmt = db.prepare(`
 `);
 
 /**
- * @param {object} row — request row with status, cancelled, plex_status, processing_phase, library_file_match?
+ * @param {object} row — request row with status, cancelled, processing_phase, library_file_match?
  * @returns {{ displayStatus: string, processingStatus: string }}
  */
 function computeDisplayFields(row) {
@@ -70,21 +67,11 @@ function computeDisplayFields(row) {
   }
 
   if (status === 'completed' || status === 'available') {
-    const s = getAvailabilitySettingsSync();
-    const plexOn = isPlexAvailabilityActive(s);
-    const plexFound =
-      row.library_plex_available === true || String(row.plex_status || '') === 'found';
     const libAvail = isUserFacingLibraryAvailable(row);
-
     if (libAvail || status === 'available') {
       return { displayStatus: 'Available', processingStatus: 'Complete' };
     }
-
-    if (plexOn && !plexFound) {
-      return { displayStatus: 'Processing', processingStatus: 'Plex Pending' };
-    }
-
-    return { displayStatus: 'Available', processingStatus: 'Complete' };
+    return { displayStatus: 'Complete', processingStatus: 'Complete' };
   }
 
   return { displayStatus: '', processingStatus: '' };

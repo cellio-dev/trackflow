@@ -71,7 +71,7 @@ function getEligibleForRequestAll(tracks) {
   const out = [];
   for (const t of tracks) {
     if (t.requestStatus !== null && t.requestStatus !== undefined) continue;
-    if (t.existsInMusicLibrary === true || t.isInUserLibrary === true || t.existsInPlex === true) {
+    if (t.existsInMusicLibrary === true || t.isInUserLibrary === true) {
       continue;
     }
     const key = String(t.id);

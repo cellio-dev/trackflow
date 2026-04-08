@@ -24,18 +24,44 @@ function shapeTrackStatusPatch(row) {
   };
 }
 
+function normalizeTrackStatusStubs(body) {
+  const tracksRaw = body?.tracks;
+  if (Array.isArray(tracksRaw) && tracksRaw.length > 0 && typeof tracksRaw[0] === 'object') {
+    const seen = new Set();
+    const out = [];
+    for (const t of tracksRaw) {
+      if (out.length >= MAX_TRACK_STATUS_IDS) break;
+      const id = t?.id != null ? String(t.id).trim() : '';
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      const artist = typeof t.artist === 'string' ? t.artist : '';
+      const title = typeof t.title === 'string' ? t.title : '';
+      const d = t?.duration;
+      const duration = d != null && Number.isFinite(Number(d)) ? Number(d) : null;
+      out.push({ id, artist, title, duration });
+    }
+    return out;
+  }
+  const rawIds = body?.ids;
+  if (!Array.isArray(rawIds)) {
+    return [];
+  }
+  const ids = [...new Set(rawIds.map((x) => String(x).trim()).filter(Boolean))].slice(
+    0,
+    MAX_TRACK_STATUS_IDS,
+  );
+  return ids.map((id) => ({ id, artist: '', title: '', duration: null }));
+}
+
 // POST /api/discover/track-status — live request/library fields for visible Deezer ids (no cache)
+// Body: { tracks: [{ id, artist?, title?, duration? }] } (preferred) or legacy { ids: string[] }
 router.post('/track-status', async (req, res) => {
-  const raw = req.body?.ids;
-  const ids = Array.isArray(raw)
-    ? [...new Set(raw.map((x) => String(x).trim()).filter(Boolean))].slice(0, MAX_TRACK_STATUS_IDS)
-    : [];
-  if (ids.length === 0) {
+  const stubs = normalizeTrackStatusStubs(req.body || {});
+  if (stubs.length === 0) {
     return res.json({ byId: {} });
   }
 
   try {
-    const stubs = ids.map((id) => ({ id }));
     const enriched = await enrichDeezerTrackRows(stubs);
     const byId = {};
     for (const row of enriched) {

@@ -23,13 +23,13 @@ const preferredFormat = document.getElementById('preferredFormat');
 const maxConcurrentDownloads = document.getElementById('maxConcurrentDownloads');
 const maxDownloadAttempts = document.getElementById('maxDownloadAttempts');
 const plexIntegration = document.getElementById('plexIntegration');
-const requirePlexForAvailable = document.getElementById('requirePlexForAvailable');
 const plexPlayHistoryRecommendations = document.getElementById('plexPlayHistoryRecommendations');
 const fileNamingPattern = document.getElementById('fileNamingPattern');
 const fileNamingPreview = document.getElementById('fileNamingPreview');
 const fileNamingError = document.getElementById('fileNamingError');
 
 const libraryPath = document.getElementById('libraryPath');
+const libraryScanPathsExtra = document.getElementById('libraryScanPathsExtra');
 const saveLibraryBtn = document.getElementById('saveLibraryBtn');
 const openManualImportBtn = document.getElementById('openManualImportBtn');
 const slskdLocalPath = document.getElementById('slskdLocalPath');
@@ -312,9 +312,6 @@ async function loadSettings() {
     if (plexIntegration) {
       plexIntegration.checked = Boolean(data.plex_integration_enabled);
     }
-    if (requirePlexForAvailable) {
-      requirePlexForAvailable.checked = Boolean(data.require_plex_for_available);
-    }
     if (plexPlayHistoryRecommendations) {
       plexPlayHistoryRecommendations.checked = Boolean(data.plex_play_history_recommendations);
     }
@@ -445,7 +442,17 @@ async function loadSettings() {
     }
 
     if (libraryPath) {
-      libraryPath.value = typeof data.library_path === 'string' ? data.library_path : '';
+      const prim =
+        typeof data.primary_library_path === 'string' && data.primary_library_path.trim()
+          ? data.primary_library_path
+          : typeof data.library_path === 'string'
+            ? data.library_path
+            : '';
+      libraryPath.value = prim;
+    }
+    if (libraryScanPathsExtra) {
+      const extra = Array.isArray(data.library_paths) ? data.library_paths : [];
+      libraryScanPathsExtra.value = extra.join('\n');
     }
     if (slskdLocalPath) {
       slskdLocalPath.value =
@@ -578,20 +585,6 @@ async function postBooleanSetting(field, checked) {
   settingsGlobalMessage.hidden = true;
 }
 
-if (requirePlexForAvailable) {
-  requirePlexForAvailable.addEventListener('change', async () => {
-    const value = requirePlexForAvailable.checked;
-    try {
-      await postBooleanSetting('require_plex_for_available', value);
-    } catch (error) {
-      console.error(error);
-      requirePlexForAvailable.checked = !value;
-      settingsGlobalMessage.hidden = false;
-      settingsGlobalMessage.textContent = error.message || 'Could not save.';
-    }
-  });
-}
-
 if (fileNamingPattern) {
   fileNamingPattern.addEventListener('input', () => {
     fileNamingError.hidden = true;
@@ -649,7 +642,13 @@ if (saveLibraryBtn) {
         headers: { 'Content-Type': 'application/json' },
         credentials: 'same-origin',
         body: JSON.stringify({
-          library_path: libraryPath ? libraryPath.value.trim() : '',
+          primary_library_path: libraryPath ? libraryPath.value.trim() : '',
+          library_paths: libraryScanPathsExtra
+            ? libraryScanPathsExtra.value
+                .split(/\r?\n/)
+                .map((s) => s.trim())
+                .filter(Boolean)
+            : [],
         }),
       });
       const errData = await response.json().catch(() => ({}));
@@ -658,7 +657,7 @@ if (saveLibraryBtn) {
       }
       await loadSettings();
       settingsGlobalMessage.hidden = false;
-      settingsGlobalMessage.textContent = 'Library folder saved.';
+      settingsGlobalMessage.textContent = 'Library folders saved.';
     } catch (error) {
       console.error(error);
       settingsGlobalMessage.hidden = false;
@@ -748,7 +747,6 @@ if (savePlexBtn) {
     try {
       const body = {
         plex_integration_enabled: plexIntegration ? plexIntegration.checked : false,
-        require_plex_for_available: requirePlexForAvailable ? requirePlexForAvailable.checked : false,
         plex_play_history_recommendations: plexPlayHistoryRecommendations
           ? plexPlayHistoryRecommendations.checked
           : false,

@@ -1,10 +1,29 @@
 // SQLite database setup for TrackFlow backend.
 // This keeps DB setup centralized and simple.
 
+const fs = require('fs');
 const path = require('path');
 const Database = require('better-sqlite3');
 
-const dbPath = path.join(__dirname, 'trackflow.sqlite');
+const envDb = process.env.TRACKFLOW_SQLITE_PATH && String(process.env.TRACKFLOW_SQLITE_PATH).trim();
+const dbPath = envDb
+  ? path.resolve(envDb)
+  : path.join(__dirname, 'trackflow.sqlite');
+const dbDir = path.dirname(dbPath);
+if (!fs.existsSync(dbDir)) {
+  fs.mkdirSync(dbDir, { recursive: true });
+}
+try {
+  fs.accessSync(dbDir, fs.constants.W_OK);
+} catch {
+  const dockerHint =
+    process.platform !== 'win32'
+      ? ' On Docker, fix host permissions (container user is often UID 1000): `sudo chown -R 1000:1000 /path/to/appdata` on the host folder mounted at /appdata.'
+      : '';
+  throw new Error(
+    `Cannot open SQLite database at ${dbPath}: directory is not writable: ${dbDir}.${dockerHint}`,
+  );
+}
 const db = new Database(dbPath);
 
 // Create requests table once at startup if missing.
@@ -47,17 +66,9 @@ if (!hasSlskdExpectedBasenameColumn) {
   db.exec(`ALTER TABLE requests ADD COLUMN slskd_expected_basename TEXT;`);
 }
 
-const requestColumnsV5 = db.prepare(`PRAGMA table_info(requests)`).all();
-const hasPlexStatusColumn = requestColumnsV5.some((column) => column.name === 'plex_status');
-if (!hasPlexStatusColumn) {
-  db.exec(`ALTER TABLE requests ADD COLUMN plex_status TEXT;`);
-}
-
-/** Legacy status → completed + Plex indexed */
+/** Legacy status → completed (no Plex state) */
 db.exec(`
-  UPDATE requests
-  SET status = 'completed', plex_status = 'found'
-  WHERE status = 'available';
+  UPDATE requests SET status = 'completed' WHERE status = 'available';
 `);
 
 const requestColumnsV6 = db.prepare(`PRAGMA table_info(requests)`).all();
@@ -116,7 +127,7 @@ function ensureSettingsColumn(columnName, alterSql) {
 }
 
 /**
- * One row per non-null trackflow_id: keep best row (db_exists, then plex_available, then id),
+ * One row per non-null trackflow_id: keep best row (db_exists, then id),
  * clear trackflow_id on the rest. Safe for file_path uniqueness (rows stay; only id cleared).
  */
 function dedupeTracksTrackflowIds(database) {
@@ -137,10 +148,10 @@ function dedupeTracksTrackflowIds(database) {
   }
 
   const selectGroup = database.prepare(`
-    SELECT id, db_exists, plex_available
+    SELECT id, db_exists
     FROM tracks
     WHERE trackflow_id = ?
-    ORDER BY db_exists DESC, plex_available DESC, id ASC
+    ORDER BY db_exists DESC, id ASC
   `);
   const clearTf = database.prepare(`UPDATE tracks SET trackflow_id = NULL WHERE id = ?`);
 
@@ -185,6 +196,11 @@ ensureSettingsColumn(
   `ALTER TABLE settings ADD COLUMN library_scan_interval_minutes INTEGER NOT NULL DEFAULT 60;`,
 );
 ensureSettingsColumn('library_path', `ALTER TABLE settings ADD COLUMN library_path TEXT;`);
+ensureSettingsColumn('primary_library_path', `ALTER TABLE settings ADD COLUMN primary_library_path TEXT;`);
+ensureSettingsColumn(
+  'library_scan_paths_json',
+  `ALTER TABLE settings ADD COLUMN library_scan_paths_json TEXT NOT NULL DEFAULT '[]';`,
+);
 ensureSettingsColumn(
   'slskd_local_download_path',
   `ALTER TABLE settings ADD COLUMN slskd_local_download_path TEXT;`,
@@ -277,6 +293,10 @@ function seedIntegrationSettingsFromEnv(database) {
       .run(ev);
   };
   seedText('library_path', 'LIBRARY_PATH');
+  seedText('primary_library_path', 'PRIMARY_LIBRARY_PATH');
+  if (!trimEv(process.env.PRIMARY_LIBRARY_PATH) && trimEv(process.env.LIBRARY_PATH)) {
+    seedText('primary_library_path', 'LIBRARY_PATH');
+  }
   seedText('slskd_local_download_path', 'SLSKD_LOCAL_DOWNLOAD_PATH');
   seedText('plex_url', 'PLEX_URL');
   seedText('plex_token', 'PLEX_TOKEN');
@@ -340,6 +360,13 @@ function seedIntegrationSettingsFromEnv(database) {
 
 seedIntegrationSettingsFromEnv(db);
 
+db.exec(`
+  UPDATE settings SET primary_library_path = library_path
+  WHERE id = 1
+    AND IFNULL(TRIM(CAST(primary_library_path AS TEXT)), '') = ''
+    AND IFNULL(TRIM(CAST(library_path AS TEXT)), '') != '';
+`);
+
 db.exec(
   `UPDATE settings SET file_naming_pattern = '%artist%/%artist% - %title%' WHERE file_naming_pattern IS NULL OR file_naming_pattern = '';`,
 );
@@ -355,7 +382,6 @@ db.exec(`
     duration_seconds INTEGER,
     file_path TEXT,
     db_exists INTEGER NOT NULL DEFAULT 1,
-    plex_available INTEGER NOT NULL DEFAULT 0,
     source TEXT,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
@@ -386,6 +412,26 @@ if (tracksFilePathIdx && Number(tracksFilePathIdx.unique) === 0) {
   `);
 }
 db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_tracks_file_path ON tracks(file_path);`);
+
+try {
+  db.exec(`
+    DELETE FROM tracks
+    WHERE IFNULL(db_exists, 0) = 0
+      AND (file_path IS NULL OR TRIM(CAST(file_path AS TEXT)) = '');
+  `);
+} catch {
+  /* ignore */
+}
+try {
+  db.exec(`ALTER TABLE tracks DROP COLUMN plex_available;`);
+} catch {
+  /* SQLite < 3.35 or column already gone */
+}
+try {
+  db.exec(`ALTER TABLE requests DROP COLUMN plex_status;`);
+} catch {
+  /* column may not exist */
+}
 
 db.exec(`DROP TABLE IF EXISTS queue;`);
 

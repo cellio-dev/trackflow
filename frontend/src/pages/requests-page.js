@@ -93,17 +93,8 @@ function resolveTrackDisplayForActiveCheck(r) {
   return { displayStatus: ds, processingStatus: ps };
 }
 
-function isRequestPlexPendingDisplay(request) {
-  const { displayStatus, processingStatus } = resolveTrackDisplayForActiveCheck(request);
-  return displayStatus === 'Processing' && processingStatus === 'Plex Pending';
-}
-
-/** Active queue: excludes terminal rows, but keeps Plex Pending (DB often `completed` + plex pending). */
+/** Active queue: excludes terminal rows (completed / denied / canceled failed, etc.). */
 function isTrackActiveRow(r) {
-  const { displayStatus, processingStatus } = resolveTrackDisplayForActiveCheck(r);
-  if (displayStatus === 'Processing' && processingStatus === 'Plex Pending') {
-    return true;
-  }
   const st = String(r?.status || '');
   const cancelled = Number(r?.cancelled) === 1;
   if (st === 'denied' || st === 'completed' || st === 'available') {
@@ -799,35 +790,6 @@ function renderRow(request) {
       });
       actionsTd.appendChild(withdrawBtn);
     }
-  }
-  if (isAdmin && isRequestPlexPendingDisplay(request)) {
-    if (actionsTd.childNodes.length) {
-      actionsTd.appendChild(document.createTextNode(' '));
-    }
-    const setAvailBtn = document.createElement('button');
-    setAvailBtn.type = 'button';
-    setAvailBtn.textContent = 'Set Available';
-    setAvailBtn.addEventListener('click', async () => {
-      try {
-        setAvailBtn.disabled = true;
-        const res = await fetch(`/api/requests/${request.id}/mark-plex-found`, {
-          method: 'POST',
-          credentials: 'same-origin',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({}),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          throw new Error(data?.error || 'Failed to mark available');
-        }
-        await refreshAfterAction();
-      } catch (error) {
-        console.error(error);
-        alert(error?.message || 'Failed');
-        setAvailBtn.disabled = false;
-      }
-    });
-    actionsTd.appendChild(setAvailBtn);
   }
   tr.appendChild(actionsTd);
 

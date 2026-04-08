@@ -14,8 +14,6 @@ const {
   clearHistoryOlderThanDays,
   clearHistoryTrackByStatus,
   clearHistoryFollowByOutcome,
-  markAllPlexPendingFound,
-  markPlexFoundForSingleRequest,
 } = require('../services/requestBulkActions');
 const { listAllFollowHistory, getFollowHistoryById, deleteFollowHistoryById } = require('../services/followRequestHistory');
 const { usernamesByIds, usernameForId } = require('../services/userDisplay');
@@ -36,13 +34,13 @@ const insertRequestStmt = db.prepare(`
 `);
 
 const getRequestByIdStmt = db.prepare(`
-  SELECT id, deezer_id, title, artist, album, user_id, status, duration_seconds, cancelled, plex_status, processing_phase, created_at, request_type
+  SELECT id, deezer_id, title, artist, album, user_id, status, duration_seconds, cancelled, processing_phase, created_at, request_type
   FROM requests
   WHERE id = ?
 `);
 
 const getRequestByDeezerIdStmt = db.prepare(`
-  SELECT id, deezer_id, title, artist, album, user_id, status, duration_seconds, cancelled, plex_status, processing_phase, created_at, request_type
+  SELECT id, deezer_id, title, artist, album, user_id, status, duration_seconds, cancelled, processing_phase, created_at, request_type
   FROM requests
   WHERE deezer_id = ?
 `);
@@ -71,27 +69,27 @@ function userMayDeleteRequestViaUserApi(row) {
 }
 
 const listRequestsStmt = db.prepare(`
-  SELECT id, deezer_id, title, artist, album, user_id, status, duration_seconds, cancelled, plex_status, processing_phase, created_at, request_type
+  SELECT id, deezer_id, title, artist, album, user_id, status, duration_seconds, cancelled, processing_phase, created_at, request_type
   FROM requests
   ORDER BY id DESC
 `);
 
 const listRequestsByStatusStmt = db.prepare(`
-  SELECT id, deezer_id, title, artist, album, user_id, status, duration_seconds, cancelled, plex_status, processing_phase, created_at, request_type
+  SELECT id, deezer_id, title, artist, album, user_id, status, duration_seconds, cancelled, processing_phase, created_at, request_type
   FROM requests
   WHERE status = ?
   ORDER BY id DESC
 `);
 
 const listRequestsByUserIdStmt = db.prepare(`
-  SELECT id, deezer_id, title, artist, album, user_id, status, duration_seconds, cancelled, plex_status, processing_phase, created_at, request_type
+  SELECT id, deezer_id, title, artist, album, user_id, status, duration_seconds, cancelled, processing_phase, created_at, request_type
   FROM requests
   WHERE user_id = ?
   ORDER BY id DESC
 `);
 
 const listRequestsByStatusAndUserIdStmt = db.prepare(`
-  SELECT id, deezer_id, title, artist, album, user_id, status, duration_seconds, cancelled, plex_status, processing_phase, created_at, request_type
+  SELECT id, deezer_id, title, artist, album, user_id, status, duration_seconds, cancelled, processing_phase, created_at, request_type
   FROM requests
   WHERE status = ? AND user_id = ?
   ORDER BY id DESC
@@ -180,18 +178,6 @@ router.post('/retry-failed', requireAdmin, async (req, res) => {
   } catch (error) {
     console.error('retry-failed failed:', error.message);
     return res.status(500).json({ error: 'retry-failed failed' });
-  }
-});
-
-// POST /api/requests/clear-plex-pending — completed rows showing Plex Pending → plex_status found (admin only)
-router.post('/clear-plex-pending', requireAdmin, async (req, res) => {
-  try {
-    const userId = resolveBulkUserId(req);
-    const summary = markAllPlexPendingFound({ userId });
-    return res.json(summary);
-  } catch (error) {
-    console.error('clear-plex-pending failed:', error.message);
-    return res.status(500).json({ error: 'clear-plex-pending failed' });
   }
 });
 
@@ -303,35 +289,6 @@ router.delete('/follow-history/:id', requireAdmin, async (req, res) => {
   } catch (error) {
     console.error('delete follow-history failed:', error.message);
     return res.status(500).json({ error: 'Failed to delete follow history row' });
-  }
-});
-
-// POST /api/requests/:id/mark-plex-found — Plex Pending row: set plex_status found (admin only)
-router.post('/:id/mark-plex-found', requireAdmin, async (req, res) => {
-  const requestId = Number(req.params.id);
-  if (!Number.isInteger(requestId) || requestId <= 0) {
-    return res.status(400).json({ error: 'Invalid request id' });
-  }
-  try {
-    const existing = getRequestByIdStmt.get(requestId);
-    if (!existing) {
-      return res.status(404).json({ error: 'Request not found' });
-    }
-    const result = markPlexFoundForSingleRequest(requestId);
-    if (!result.ok) {
-      if (result.code === 'NOT_FOUND') {
-        return res.status(404).json({ error: 'Request not found' });
-      }
-      if (result.code === 'NOT_PLEX_PENDING') {
-        return res.status(400).json({ error: 'This request is not Plex Pending' });
-      }
-      return res.status(400).json({ error: 'Invalid request' });
-    }
-    const enriched = await enrichRequestRowWithLibraryMatch(enrichRequestRow(result.row));
-    return res.json({ request: enriched });
-  } catch (error) {
-    console.error('mark-plex-found failed:', error.message);
-    return res.status(500).json({ error: 'Failed to update request' });
   }
 });
 

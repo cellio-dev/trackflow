@@ -64,7 +64,10 @@ function wireLaunchControl() {
       return;
     }
     rememberJukeboxReturnHref();
-    window.location.href = `${origin}/jukebox-guest.html?id=${encodeURIComponent(lastJukeboxId)}${jukeboxReturnParam()}`;
+    /* replace: no history entry for the panel — iOS swipe-back cannot return to Launch without Close */
+    window.location.replace(
+      `${origin}/jukebox-guest.html?id=${encodeURIComponent(lastJukeboxId)}${jukeboxReturnParam()}`,
+    );
   };
   const openControl = () => {
     if (!lastJukeboxId) {

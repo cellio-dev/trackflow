@@ -19,7 +19,7 @@ import './track-card-shared.js';
     if (track.isInUserLibrary === true) {
       return true;
     }
-    if (track.existsInMusicLibrary === true || track.existsInPlex === true) {
+    if (track.existsInMusicLibrary === true) {
       return true;
     }
     return false;
@@ -118,7 +118,7 @@ import './track-card-shared.js';
       requestId: serverRow.requestId,
       requestPlexStatus: serverRow.requestPlexStatus,
       existsInMusicLibrary: serverRow.existsInMusicLibrary,
-      existsInPlex: serverRow.existsInPlex,
+      existsInPlex: false,
       isInUserLibrary: serverRow.isInUserLibrary,
     };
   }

@@ -1,7 +1,7 @@
 # Dependencies
 node_modules/
 
-# Environment / local secrets (backend loads backend/.env)
+# Environment / local secrets (backend loads backend/.env; Docker Compose uses root `.env` for substitution)
 .env
 .env.local
 .env.*.local

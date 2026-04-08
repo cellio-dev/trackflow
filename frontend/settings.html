@@ -55,25 +55,17 @@
         font-size: 14px;
       }
 
-      .setting-row input.integration-wide {
+      .setting-row input.integration-wide,
+      .setting-row textarea.integration-wide {
         width: 100%;
         max-width: 520px;
         box-sizing: border-box;
       }
 
-      .setting-inline-input-save {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 10px;
-        width: 100%;
-        max-width: 520px;
-      }
-
-      .setting-inline-input-save > input[type='text'] {
-        flex: 1 1 200px;
-        min-width: 0;
-        box-sizing: border-box;
+      .setting-row textarea {
+        padding: 6px 8px;
+        font-size: 14px;
+        font-family: inherit;
       }
 
       .setting-hint {
@@ -447,14 +439,41 @@
 
       <h2 class="settings-section-heading">Library</h2>
       <div class="setting-row">
-        <label class="block-label" for="libraryPath">Music library folder</label>
-        <div class="setting-inline-input-save">
-          <input id="libraryPath" type="text" autocomplete="off" spellcheck="false" />
-          <button id="saveLibraryBtn" type="button" aria-label="Save music library folder path">
-            Save
-          </button>
-        </div>
-        <p class="setting-hint">Final location for moved tracks (same role as the old <code>LIBRARY_PATH</code>).</p>
+        <label class="block-label" for="libraryPath">Primary library folder (download destination)</label>
+        <input
+          id="libraryPath"
+          type="text"
+          class="integration-wide"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <p class="setting-hint">
+          Where finished downloads are moved. This folder is always scanned for track availability.
+        </p>
+      </div>
+      <div class="setting-row">
+        <label class="block-label" for="libraryScanPathsExtra">Extra folders to scan (optional)</label>
+        <textarea
+          id="libraryScanPathsExtra"
+          class="integration-wide"
+          rows="4"
+          autocomplete="off"
+          spellcheck="false"
+          placeholder="One absolute path per line — read-only roots for matching files already on disk."
+        ></textarea>
+        <p class="setting-hint">
+          Additional directories scanned only for availability (not used as the download target). Paths must not duplicate
+          the primary folder.
+        </p>
+      </div>
+      <div class="setting-row">
+        <button
+          id="saveLibraryBtn"
+          type="button"
+          aria-label="Save primary library folder and extra scan folders"
+        >
+          Save library folders
+        </button>
       </div>
 
       <div class="setting-row">
@@ -700,23 +719,9 @@
           Run Plex Library Scan Before Sync
         </label>
         <p class="setting-hint">
-          When enabled, each <strong>Plex Sync</strong> job asks Plex Media Server to refresh the music library first, then TrackFlow scans Plex and syncs followed playlists.
-        </p>
-      </div>
-
-      <div class="setting-row setting-sub">
-        <label>
-          <input id="requirePlexForAvailable" type="checkbox" />
-          Require Plex detection for &ldquo;Available&rdquo; status
-        </label>
-        <p class="setting-hint">
-          When enabled, TrackFlow will only treat a track as &ldquo;available&rdquo; if it has been detected in Plex.
-        </p>
-        <p class="setting-hint">
-          When disabled, a track is considered available if it exists on disk or has been detected in Plex.
-        </p>
-        <p class="setting-hint setting-hint--warning">
-          ⚠️ Tracks may already be available in Plex but will not appear as available here until the next Plex scan job runs and updates the database.
+          When enabled, each <strong>Plex Sync</strong> job asks Plex Media Server to refresh the music library, runs a
+          TrackFlow <strong>filesystem</strong> library scan, maps Plex rating keys for playlist sync, then syncs followed
+          playlists.
         </p>
       </div>
 
@@ -820,7 +825,7 @@
             </td>
           </tr>
           <tr data-job-row="plex_sync">
-            <td>Plex Sync (scan library + sync playlists)</td>
+            <td>Plex Sync (rating keys + playlists)</td>
             <td><input type="checkbox" id="jobPlexSyncEnabled" aria-label="Enable Plex Sync job" /></td>
             <td><input type="number" id="plexScanIntervalMinutes" min="5" max="720" step="1" aria-label="Plex Sync interval minutes" /></td>
             <td class="job-schedule-meta" data-job-last="plex_sync">—</td>

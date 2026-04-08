@@ -88,6 +88,25 @@ function buildHoverDetailsShell() {
   return { wrap, artistRow, titleRow, albumRow };
 }
 
+/**
+ * Persist title/artist/duration on the card for POST /api/discover/track-status polling
+ * (id-only stubs cannot match library rows without trackflow_id tags).
+ */
+function syncTrackStatusPollHints(li, track) {
+  if (!li || !track || typeof track !== 'object') {
+    return;
+  }
+  const artist = typeof track.artist === 'string' ? track.artist : '';
+  const title = typeof track.title === 'string' ? track.title : '';
+  const d =
+    track.duration != null && Number.isFinite(Number(track.duration))
+      ? String(Math.round(Number(track.duration)))
+      : '';
+  li.setAttribute('data-tf-enrich-artist', artist);
+  li.setAttribute('data-tf-enrich-title', title);
+  li.setAttribute('data-tf-enrich-duration', d);
+}
+
 function syncHoverDetailRows(artistRow, titleRow, albumRow, track) {
   const sig = [
     track.artist ?? '',
@@ -333,6 +352,7 @@ function createTrackListItem(track, options) {
   );
 
   mountPrimaryControls();
+  syncTrackStatusPollHints(li, current);
 
   hoverActions.appendChild(playBtn);
   hoverActions.appendChild(actionRight);
@@ -379,6 +399,7 @@ function createTrackListItem(track, options) {
       typeof current.preview === 'string' && current.preview.trim() ? current.preview.trim() : null;
     applyPreviewUrl(nextPreview);
     mountPrimaryControls();
+    syncTrackStatusPollHints(li, current);
   }
 
   li._trackflowPatch = patchTrack;

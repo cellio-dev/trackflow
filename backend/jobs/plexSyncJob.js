@@ -1,10 +1,11 @@
 /**
- * Plex Sync: optional PMS library refresh → TrackFlow Plex library scan → followed playlists → Plex.
+ * Plex Sync: optional PMS library refresh + filesystem library scan → Plex rating-key mapping → followed playlists.
  */
 
 const { getDb } = require('../db');
 const { getAvailabilitySettingsSync } = require('../services/libraryAvailability');
 const { triggerPlexLibrarySectionRefresh } = require('../services/plex');
+const { runLibraryScanJob } = require('./libraryScanJob');
 const { runPlexLibraryScanJob } = require('./plexLibraryScanJob');
 const { runPlexPlaylistSyncCore } = require('./plexPlaylistSyncJob');
 
@@ -33,10 +34,12 @@ async function runPlexSyncJob() {
   if (Number(s?.plex_run_library_scan_before_sync) === 1) {
     await triggerPlexLibrarySectionRefresh();
     out.steps.push({ name: 'plex_server_library_refresh', ok: true });
+    const fsScan = await runLibraryScanJob();
+    out.steps.push({ name: 'filesystem_library_scan', ...fsScan });
   }
 
-  const scanResult = await runPlexLibraryScanJob();
-  out.steps.push({ name: 'plex_library_scan', ...scanResult });
+  const rkResult = await runPlexLibraryScanJob();
+  out.steps.push({ name: 'plex_rating_key_sync', ...rkResult });
 
   const playlistResult = await runPlexPlaylistSyncCore();
   out.steps.push({ name: 'plex_playlist_sync', ...playlistResult });

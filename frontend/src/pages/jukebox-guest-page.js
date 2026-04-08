@@ -7,6 +7,10 @@ import {
   jukeboxSearchTrackBlockedFromQueue,
 } from '../js/jukebox-search-queue-shared.js';
 import * as JbCast from '../js/jukebox-cast.js';
+import {
+  installJukeboxGuestBackGuard,
+  releaseJukeboxGuestBackGuard,
+} from '../js/jukebox-guest-back-guard.js';
 
 const RETURN_AFTER_JUKEBOX_KEY = 'tf-jukebox-return-href';
 
@@ -45,13 +49,15 @@ function returnAfterJukeboxHref() {
 }
 
 function navigateAfterJukeboxClosed() {
+  releaseJukeboxGuestBackGuard();
   const href = returnAfterJukeboxHref();
   try {
     sessionStorage.removeItem(RETURN_AFTER_JUKEBOX_KEY);
   } catch {
     /* ignore */
   }
-  window.location.href = href;
+  /* replace: drop guest from joint history so Back does not reopen guest after Close */
+  window.location.replace(href);
 }
 
 const jukeboxId = params.get('id');
@@ -775,20 +781,56 @@ function syncDiscoveryStrip(container, rows, stripKey) {
   }
 }
 
+function updateDiscoveryEmptyHint() {
+  const hint = document.getElementById('jbDiscoveryEmpty');
+  if (!hint) {
+    return;
+  }
+  const n =
+    (topTracksList?.childElementCount ?? 0) +
+    (freshTracksList?.childElementCount ?? 0) +
+    (recentMixList?.childElementCount ?? 0);
+  hint.hidden = n > 0;
+}
+
 function applyDiscoverySections(data) {
   if (data.top_tracks == null && data.fresh_tracks == null && data.recent_mix == null) {
+    updateDiscoveryEmptyHint();
     return;
   }
   syncDiscoveryStrip(topTracksList, data.top_tracks, 'topTracks');
   syncDiscoveryStrip(freshTracksList, data.fresh_tracks, 'freshTracks');
   syncDiscoveryStrip(recentMixList, data.recent_mix, 'recentMix');
+  updateDiscoveryEmptyHint();
 }
 
 async function fetchGuestState(includeDiscovery) {
   const q = includeDiscovery ? qs() : `${qs()}&discovery=0`;
   const url = `${base}/state?${q}`;
   const res = await fetch(url, { credentials: 'same-origin' });
-  const data = await res.json().catch(() => ({}));
+  let data;
+  try {
+    data = await res.json();
+  } catch {
+    return { ok: false, data: { error: 'Invalid response from server' } };
+  }
+  /* Only reject when the server omitted discovery keys entirely (not when arrays are empty). */
+  if (
+    res.ok &&
+    includeDiscovery &&
+    data &&
+    typeof data === 'object' &&
+    !Array.isArray(data) &&
+    data.jukebox &&
+    !('top_tracks' in data) &&
+    !('fresh_tracks' in data) &&
+    !('recent_mix' in data)
+  ) {
+    return {
+      ok: false,
+      data: { ...(data || {}), error: 'Discover data missing from response' },
+    };
+  }
   return { ok: res.ok, data };
 }
 
@@ -973,8 +1015,10 @@ function applyPlaybackState(data) {
 
     if (useCast) {
       withIgnoreMediaEvents(() => {
-        audioEl.pause();
-        audioEl.removeAttribute('src');
+        if (audioEl) {
+          audioEl.pause();
+          audioEl.removeAttribute('src');
+        }
       });
       JbCast.castSetReceiverVolume(vol);
       if (lastQueueItemId !== data.current.id) {
@@ -1012,21 +1056,26 @@ function applyPlaybackState(data) {
       })();
     } else {
       lastCastLoadedQueueItemId = null;
-      withIgnoreMediaEvents(() => {
-        if (lastQueueItemId !== data.current.id) {
-          trackJustChanged = true;
-          lastQueueItemId = data.current.id;
-          audioEl.src = relStream;
-        }
-        if (serverPaused) {
-          audioEl.pause();
-        } else if (serverBecamePlaying || firstPlaybackState || !audioEl.paused || trackJustChanged) {
-          void audioEl.play().catch(() => {});
-        }
-      });
-      audioEl.volume = vol;
-      currentPlayingQueueItemId = data.current.id;
-      setPlayIcon(audioEl.paused);
+      if (audioEl) {
+        withIgnoreMediaEvents(() => {
+          if (lastQueueItemId !== data.current.id) {
+            trackJustChanged = true;
+            lastQueueItemId = data.current.id;
+            audioEl.src = relStream;
+          }
+          if (serverPaused) {
+            audioEl.pause();
+          } else if (serverBecamePlaying || firstPlaybackState || !audioEl.paused || trackJustChanged) {
+            void audioEl.play().catch(() => {});
+          }
+        });
+        audioEl.volume = vol;
+        currentPlayingQueueItemId = data.current.id;
+        setPlayIcon(audioEl.paused);
+      } else {
+        currentPlayingQueueItemId = data.current.id;
+        setPlayIcon(true);
+      }
       applyHostSeekFromJukeboxState(data);
     }
   } else {
@@ -1045,8 +1094,10 @@ function applyPlaybackState(data) {
       JbCast.castStopMediaIfAny();
     }
     withIgnoreMediaEvents(() => {
-      audioEl.pause();
-      audioEl.removeAttribute('src');
+      if (audioEl) {
+        audioEl.pause();
+        audioEl.removeAttribute('src');
+      }
     });
     setPlayIcon(true);
     if (npProgressFill) {
@@ -1126,6 +1177,7 @@ async function maybeSilentlyRefreshDiscovery() {
 }
 
 async function bootstrapGuestUi() {
+  let installBackGuard = false;
   try {
     if (!jukeboxId || !guestToken) {
       return;
@@ -1136,11 +1188,21 @@ async function bootstrapGuestUi() {
       globalErr.textContent = data.error || 'Could not load';
       return;
     }
-    applyPlaybackState(data);
+    /* Discovery before playback: applyPlaybackState can throw if <audio> is missing; strips must still render. */
     applyDiscoverySections(data);
+    try {
+      applyPlaybackState(data);
+    } catch (e) {
+      console.warn('[jukebox guest] applyPlaybackState', e);
+    }
     attachGuestTrackEndedHandler();
+    installBackGuard = true;
   } finally {
     hideJukeboxPageLoading();
+  }
+  /* Defer history/touch guard so the first paint + discovery DOM settle before WebKit history work. */
+  if (installBackGuard) {
+    window.setTimeout(() => installJukeboxGuestBackGuard(), 0);
   }
 }
 
@@ -1660,5 +1722,5 @@ if (JbCast.shouldOfferCastUi()) {
 }
 
 setInterval(() => void refreshPlaybackOnly(), 2800);
-setInterval(() => void maybeSilentlyRefreshDiscovery(), 420000);
+setInterval(() => void maybeSilentlyRefreshDiscovery(), 120000);
 void bootstrapGuestUi();

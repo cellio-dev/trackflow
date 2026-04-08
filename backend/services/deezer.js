@@ -762,6 +762,8 @@ async function getAlbumTracks(albumId) {
 
 module.exports = {
   ARTIST_TOP_TRACKS_LIMIT,
+  /** Deezer ids used for Discover genre cards and genre-page cache warming. */
+  POPULAR_GENRE_IDS,
   fetchDeezerJson,
   searchTracks,
   searchArtists,

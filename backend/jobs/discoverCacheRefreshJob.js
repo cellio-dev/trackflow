@@ -1,6 +1,7 @@
 const { getDb } = require('../db');
 const {
   buildAndStoreGlobalHomeCache,
+  refreshDiscoverGenreGlobalCaches,
   rebuildUserDiscoverCacheRow,
 } = require('../services/discoverCacheService');
 
@@ -25,7 +26,13 @@ async function runDiscoverCacheRefreshJob() {
   jobRunning = true;
   const started = Date.now();
   try {
-    await buildAndStoreGlobalHomeCache();
+    const homePayload = await buildAndStoreGlobalHomeCache();
+    const genreWarm = await refreshDiscoverGenreGlobalCaches(homePayload);
+    if (genreWarm.warmed > 0 || genreWarm.failed > 0) {
+      console.log(
+        `discoverCacheRefreshJob: genre global cache warmed ${genreWarm.warmed}, failed ${genreWarm.failed}`,
+      );
+    }
 
     const users = db.prepare(`SELECT id FROM users ORDER BY id ASC`).all();
     const ids = users.map((r) => String(r.id)).filter(Boolean);
@@ -45,9 +52,16 @@ async function runDiscoverCacheRefreshJob() {
 
     const ms = Date.now() - started;
     console.log(
-      `discoverCacheRefreshJob: global home refreshed; ${usersProcessed}/${ids.length} user cache(s) updated in ${ms}ms`,
+      `discoverCacheRefreshJob: global home + genre caches refreshed; ${usersProcessed}/${ids.length} user cache(s) updated in ${ms}ms`,
     );
-    return { ok: true, usersProcessed, userCount: ids.length, durationMs: ms };
+    return {
+      ok: true,
+      usersProcessed,
+      userCount: ids.length,
+      genreCachesWarmed: genreWarm.warmed,
+      genreCachesFailed: genreWarm.failed,
+      durationMs: ms,
+    };
   } finally {
     jobRunning = false;
   }

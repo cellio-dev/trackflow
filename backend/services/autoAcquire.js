@@ -20,13 +20,13 @@ const insertRequestStmt = db.prepare(`
 `);
 
 const getRequestByIdStmt = db.prepare(`
-  SELECT id, deezer_id, title, artist, album, user_id, status, duration_seconds, cancelled, plex_status, processing_phase, created_at, request_type
+  SELECT id, deezer_id, title, artist, album, user_id, status, duration_seconds, cancelled, processing_phase, created_at, request_type
   FROM requests
   WHERE id = ?
 `);
 
 const getRequestByDeezerIdStmt = db.prepare(`
-  SELECT id, deezer_id, title, artist, album, user_id, status, duration_seconds, cancelled, plex_status, processing_phase, created_at, request_type
+  SELECT id, deezer_id, title, artist, album, user_id, status, duration_seconds, cancelled, processing_phase, created_at, request_type
   FROM requests
   WHERE deezer_id = ?
 `);

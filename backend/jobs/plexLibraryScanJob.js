@@ -1,8 +1,10 @@
 /**
- * Scheduled Plex scan: updates `tracks.plex_available`; syncs completed requests' plex_status.
+ * Plex metadata pass: maps Plex rating keys onto existing file-backed `tracks` rows only.
+ * Does not affect availability (filesystem scan is source of truth).
  */
 
 const runtimeConfig = require('../services/runtimeConfig');
+const { getLibraryPath } = runtimeConfig;
 const {
   assertConfiguredMusicSectionValid,
   fetchAllTracksInMusicSection,
@@ -10,14 +12,9 @@ const {
   getPlexMusicSectionId,
   tryReadTrackflowIdFromPlexMediaFile,
 } = require('../services/plex');
-const { getLibraryPath } = require('../services/libraryMove');
 const { getAvailabilitySettingsSync } = require('../services/libraryAvailability');
 const { getTrackById } = require('../services/deezer');
-const {
-  clearAllPlexAvailableFlags,
-  insertOrUpdateTrackFromPlex,
-  syncRequestPlexStatusFromTracks,
-} = require('../services/tracksDb');
+const { applyPlexRatingKeyFromPlexMetadata } = require('../services/tracksDb');
 
 function plexDurationToSeconds(item) {
   const ms = Number(item?.duration);
@@ -41,11 +38,9 @@ async function runPlexLibraryScanJob() {
   const sectionIdRaw = String(getPlexMusicSectionId() || '').trim();
   await assertConfiguredMusicSectionValid(base, plexToken, sectionIdRaw);
 
-  clearAllPlexAvailableFlags();
-
   const libraryRoot = getLibraryPath();
   const items = await fetchAllTracksInMusicSection();
-  let n = 0;
+  let matched = 0;
   for (const item of items) {
     const albumArtistPlex = String(item?.grandparentTitle || '').trim() || null;
     let artist = String(item?.grandparentTitle || item?.originalTitle || '').trim();
@@ -83,12 +78,13 @@ async function runPlexLibraryScanJob() {
       year: item?.year != null ? String(item.year) : null,
       plex_rating_key: item?.ratingKey != null ? String(item.ratingKey) : null,
     };
-    insertOrUpdateTrackFromPlex(meta, plexDurationToSeconds(item));
-    n += 1;
+    const id = applyPlexRatingKeyFromPlexMetadata(meta, plexDurationToSeconds(item));
+    if (id != null) {
+      matched += 1;
+    }
   }
 
-  syncRequestPlexStatusFromTracks();
-  return { ok: true, plexTracks: n };
+  return { ok: true, plexTracks: items.length, ratingKeyMatches: matched };
 }
 
 module.exports = { runPlexLibraryScanJob };

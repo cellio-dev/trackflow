@@ -12,13 +12,13 @@ const LIBRARY_FILE_WAIT_MS = 60_000;
 const LIBRARY_FILE_POLL_MS = 2000;
 
 const getRequestByIdStmt = db.prepare(`
-  SELECT id, deezer_id, title, artist, album, user_id, status, duration_seconds, cancelled, plex_status, processing_phase, created_at, request_type
+  SELECT id, deezer_id, title, artist, album, user_id, status, duration_seconds, cancelled, processing_phase, created_at, request_type
   FROM requests
   WHERE id = ?
 `);
 
 const listProcessingNonCancelledStmt = db.prepare(`
-  SELECT id, deezer_id, title, artist, album, user_id, status, duration_seconds, cancelled, plex_status, processing_phase, created_at, request_type
+  SELECT id, deezer_id, title, artist, album, user_id, status, duration_seconds, cancelled, processing_phase, created_at, request_type
   FROM requests
   WHERE status = 'processing' AND IFNULL(cancelled, 0) != 1
   ORDER BY id ASC
@@ -67,9 +67,9 @@ const setProcessingStmt = db.prepare(`
   WHERE id = ?
 `);
 
-const setCompletedPendingPlexStmt = db.prepare(`
+const setCompletedStmt = db.prepare(`
   UPDATE requests
-  SET status = 'completed', plex_status = 'pending', processing_phase = NULL
+  SET status = 'completed', processing_phase = NULL
   WHERE id = ?
 `);
 
@@ -108,8 +108,8 @@ async function runOneDownloadJob(job) {
       hasFile = await waitForLibraryMatch(job.requestId);
     }
     if (hasFile) {
-      setCompletedPendingPlexStmt.run(job.requestId);
-      console.log('Request marked completed (library file present); plex_status=pending:', job.requestId);
+      setCompletedStmt.run(job.requestId);
+      console.log('Request marked completed (library file present):', job.requestId);
     } else {
       console.warn(
         'Download finished but library file not found by naming pattern; leaving processing:',
@@ -203,13 +203,9 @@ async function resumeProcessingRequestsAfterRestart() {
 
   for (const row of rows) {
     if (fileExistsInLibraryForRequestSync(row, pool)) {
-      setCompletedPendingPlexStmt.run(row.id);
+      setCompletedStmt.run(row.id);
       completedFromLibrary += 1;
-      console.log(
-        'Resume after restart: request',
-        row.id,
-        'already in library → marked completed (plex pending)',
-      );
+      console.log('Resume after restart: request', row.id, 'already in library → marked completed');
     } else {
       resetProcessingRowForResumeStmt.run(row.id);
       const fresh = getRequestByIdStmt.get(row.id);

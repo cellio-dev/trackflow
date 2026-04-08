@@ -3,11 +3,10 @@
  */
 
 const crypto = require('crypto');
-const path = require('path');
 const fs = require('fs');
 const bcrypt = require('bcryptjs');
 const { getDb } = require('../db');
-const { getLibraryPath } = require('./runtimeConfig');
+const { resolveStoredLibraryFileToAbsolute } = require('./libraryPaths');
 const deezer = require('./deezer');
 const { findPresentTrackForProbe, enrichRequestRowFromTracksSync } = require('./tracksDb');
 const { computeDisplayFields } = require('./requestDisplayStatus');
@@ -22,7 +21,7 @@ const insertRequestStmt = db.prepare(`
 `);
 
 const getRequestByIdStmt = db.prepare(`
-  SELECT id, deezer_id, title, artist, album, user_id, status, duration_seconds, cancelled, plex_status, processing_phase, created_at, request_type
+  SELECT id, deezer_id, title, artist, album, user_id, status, duration_seconds, cancelled, processing_phase, created_at, request_type
   FROM requests WHERE id = ?
 `);
 
@@ -31,7 +30,7 @@ const getRequestByDeezerIdStmt = db.prepare(`
 `);
 
 const getRequestStatusRowByDeezerStmt = db.prepare(`
-  SELECT id, status, cancelled, plex_status, processing_phase
+  SELECT id, status, cancelled, processing_phase
   FROM requests WHERE deezer_id = ? ORDER BY id DESC LIMIT 1
 `);
 
@@ -40,7 +39,7 @@ const getJukeboxRequestsAutoApproveStmt = db.prepare(`
 `);
 
 const getTrackByIdStmt = db.prepare(`
-  SELECT id, trackflow_id, artist, title, album, file_path, db_exists
+  SELECT id, trackflow_id, artist, title, album, file_path, db_exists, plex_rating_key
   FROM tracks WHERE id = ?
 `);
 
@@ -539,7 +538,7 @@ function promotePendingQueueItems(jukeboxId) {
       continue;
     }
     const lib = resolveLibraryTrackForDeezer(it.deezer_id || req.deezer_id);
-    if (lib && Number(lib.db_exists) === 1) {
+    if (lib && trackRowPlayableInJukebox(lib)) {
       updateQueueItemStmt.run({
         id: it.id,
         jukebox_id: jukeboxId,
@@ -552,13 +551,14 @@ function promotePendingQueueItems(jukeboxId) {
   }
 }
 
-/** True when the library file exists on disk and can be streamed (may differ from library_ready). */
+/** True when the track file exists under a configured library root (may differ from library_ready). */
 function queueRowStreamReady(row) {
   const lid = row.library_track_id;
   if (lid == null || lid === '' || !(Number(lid) > 0)) {
     return false;
   }
-  return Boolean(resolveStreamPath(Number(lid)));
+  const tr = getTrackByIdStmt.get(Number(lid));
+  return Boolean(tr && trackRowPlayableInJukebox(tr));
 }
 
 /**
@@ -676,7 +676,8 @@ function pickNextPlayableItem(jukeboxId) {
     if (lid == null || lid === '' || !(Number(lid) > 0)) {
       continue;
     }
-    if (!resolveStreamPath(Number(lid))) {
+    const trPick = getTrackByIdStmt.get(Number(lid));
+    if (!trPick || !trackRowPlayableInJukebox(trPick)) {
       continue;
     }
     const st = it.status;
@@ -732,7 +733,8 @@ function ensureNowPlaying(jukeboxId) {
       });
       continue;
     }
-    if (!resolveStreamPath(Number(lid))) {
+    const trCur = getTrackByIdStmt.get(Number(lid));
+    if (!trCur || !trackRowPlayableInJukebox(trCur)) {
       if (queueItemRequestFacingStatusFromRequest(cur) === 'Needs Attention') {
         deleteQueueItemStmt.run(cur.id, jukeboxId);
         renumberQueue(jukeboxId);
@@ -864,7 +866,7 @@ async function seedPartyPlaylistQueue(jb, appendOnly = false) {
       continue;
     }
     const lib = resolveLibraryTrackForDeezer(did);
-    if (!lib || Number(lib.db_exists) !== 1) {
+    if (!lib || !trackRowPlayableInJukebox(lib)) {
       continue;
     }
     const title = t.title || lib.title || 'Unknown';
@@ -915,7 +917,6 @@ function assertJukeboxQueueAllowedForDeezerRequest(deezerId) {
   const { displayStatus, processingStatus } = computeDisplayFields({
     ...row,
     library_file_match: false,
-    library_plex_available: false,
   });
   if (displayStatus === 'Denied' || displayStatus === 'Needs Attention') {
     throw new Error(
@@ -955,7 +956,7 @@ async function addGuestTrack(jukeboxId, body) {
     const lid = Number(rawLid);
     if (Number.isFinite(lid) && lid > 0) {
       const tr = getTrackByIdStmt.get(lid);
-      if (tr && Number(tr.db_exists) === 1) {
+      if (tr && trackRowPlayableInJukebox(tr)) {
         directLib = tr;
       }
     }
@@ -992,7 +993,7 @@ async function addGuestTrack(jukeboxId, body) {
 
   const tempPos = nextQueuePosition(jukeboxId);
 
-  if (directLib && Number(directLib.db_exists) === 1) {
+  if (directLib && trackRowPlayableInJukebox(directLib)) {
     const ins = insertQueueStmt.run({
       jukebox_id: jukeboxId,
       position: tempPos,
@@ -1025,7 +1026,7 @@ async function addGuestTrack(jukeboxId, body) {
   }
   const lib = resolveLibraryTrackForDeezer(deezer_id);
 
-  if (lib && Number(lib.db_exists) === 1) {
+  if (lib && trackRowPlayableInJukebox(lib)) {
     const ins = insertQueueStmt.run({
       jukebox_id: jukeboxId,
       position: tempPos,
@@ -1329,13 +1330,18 @@ function shuffleInPlace(arr) {
   return a;
 }
 
+/** Guest discovery cards: need a Deezer id; local file optional (guest can queue via deezer / requests). */
 function trackRowToDiscoveryRow(t) {
-  if (!t || Number(t.db_exists) !== 1 || !t.file_path || !t.trackflow_id) {
+  if (!t || Number(t.db_exists) !== 1) {
+    return null;
+  }
+  const flow = String(t.trackflow_id ?? '').trim();
+  if (!flow) {
     return null;
   }
   return normalizeDiscoveryRow({
     library_track_id: t.id,
-    deezer_id: t.trackflow_id,
+    deezer_id: flow,
     title: t.title,
     artist: t.artist,
     album: t.album || '',
@@ -1353,8 +1359,6 @@ function freshTracksFromRecentLibraryAdds(excludeLibIds) {
       `
     SELECT id FROM tracks
     WHERE db_exists = 1
-      AND file_path IS NOT NULL
-      AND TRIM(COALESCE(file_path, '')) != ''
       AND trackflow_id IS NOT NULL
       AND TRIM(COALESCE(trackflow_id, '')) != ''
     ORDER BY datetime(COALESCE(updated_at, '1970-01-01 00:00:00')) DESC, id DESC
@@ -1423,15 +1427,9 @@ function popularTracks(jukeboxId, limit = 12) {
   const out = [];
   for (const r of rows) {
     const t = getTrackByIdStmt.get(r.library_track_id);
-    if (t && Number(t.db_exists) === 1 && t.file_path) {
-      out.push({
-        library_track_id: t.id,
-        deezer_id: t.trackflow_id,
-        title: t.title,
-        artist: t.artist,
-        album: t.album,
-        play_count: r.c,
-      });
+    const row = trackRowToDiscoveryRow(t);
+    if (row) {
+      out.push({ ...row, play_count: r.c });
     }
   }
   return out;
@@ -1453,15 +1451,9 @@ function recentTracks(jukeboxId, limit = 12) {
   const out = [];
   for (const r of rows) {
     const t = getTrackByIdStmt.get(r.library_track_id);
-    if (t && Number(t.db_exists) === 1 && t.file_path) {
-      out.push({
-        library_track_id: t.id,
-        deezer_id: t.trackflow_id,
-        title: t.title,
-        artist: t.artist,
-        album: t.album,
-        last_played: r.last_played,
-      });
+    const row = trackRowToDiscoveryRow(t);
+    if (row) {
+      out.push({ ...row, last_played: r.last_played });
     }
   }
   return out;
@@ -1507,7 +1499,7 @@ function randomLibraryTracksExcluding(jukeboxId, excludeLibIds, limit) {
   const lim = Math.min(30, Math.max(1, Math.floor(Number(limit) || 25)));
   let sql = `
     SELECT id, trackflow_id, artist, title, album FROM tracks
-    WHERE db_exists = 1 AND file_path IS NOT NULL AND trackflow_id IS NOT NULL AND trackflow_id != ''`;
+    WHERE db_exists = 1 AND trackflow_id IS NOT NULL AND TRIM(COALESCE(trackflow_id, '')) != ''`;
   const params = [];
   if (exclude.length) {
     sql += ` AND id NOT IN (${exclude.map(() => '?').join(',')})`;
@@ -1632,23 +1624,19 @@ function assertGuestToken(jb, token) {
 }
 
 function resolveStreamPath(libraryTrackId) {
-  const libRoot = getLibraryPath();
-  if (!libRoot) {
-    return null;
-  }
   const row = getTrackByIdStmt.get(libraryTrackId);
   if (!row || Number(row.db_exists) !== 1 || !row.file_path) {
     return null;
   }
-  const full = path.resolve(libRoot, row.file_path);
-  const rootResolved = path.resolve(libRoot);
-  if (!full.startsWith(rootResolved + path.sep) && full !== rootResolved) {
-    return null;
+  return resolveStoredLibraryFileToAbsolute(row.file_path);
+}
+
+/** True when jukebox can play this `tracks` row from a configured library root on disk. */
+function trackRowPlayableInJukebox(row) {
+  if (!row || !(Number(row.id) > 0)) {
+    return false;
   }
-  if (!fs.existsSync(full)) {
-    return null;
-  }
-  return full;
+  return Boolean(resolveStreamPath(Number(row.id)));
 }
 
 function canGuestStreamTrack(jukeboxId, libraryTrackId) {
@@ -1828,7 +1816,7 @@ async function hostAddPlaylist(jukeboxId, token, playlistId) {
       continue;
     }
     const lib = resolveLibraryTrackForDeezer(did);
-    if (!lib || Number(lib.db_exists) !== 1) {
+    if (!lib || !trackRowPlayableInJukebox(lib)) {
       continue;
     }
     insertQueueStmt.run({
@@ -1927,6 +1915,7 @@ module.exports = {
   assertGuestToken,
   assertHostToken,
   resolveStreamPath,
+  trackRowPlayableInJukebox,
   canGuestStreamTrack,
   canHostStreamTrack,
   hostSkip,

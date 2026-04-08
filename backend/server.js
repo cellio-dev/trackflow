@@ -1,4 +1,5 @@
 // Load .env from this folder so SLSKD/PLEX keys work when cwd is not `backend/`
+const fs = require('fs');
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 const { ensureSessionSecret } = require('./bootstrap/sessionSecret');
@@ -71,11 +72,16 @@ app.use('/api/settings', requireAdmin, settingsRoutes);
 app.use('/api/library', requireAdmin, manualImportRoutes);
 app.use('/api/playlists', requireAuth, playlistsRoutes);
 app.use('/api/artists', requireAuth, artistsRoutes);
-
 const frontendDir = path.join(__dirname, '../frontend');
-// Serve Vite `public/` at site root (icons, manifest) while HTML lives in `frontend/`.
-app.use(express.static(path.join(frontendDir, 'public')));
-app.use(express.static(frontendDir));
+const frontendDist = path.join(frontendDir, 'dist');
+const useBuiltFrontend = fs.existsSync(path.join(frontendDist, 'index.html'));
+if (useBuiltFrontend) {
+  app.use(express.static(frontendDist));
+} else {
+  // Dev-style: Vite `public/` + source tree (use `vite` on port 5173 for JS/CSS).
+  app.use(express.static(path.join(frontendDir, 'public')));
+  app.use(express.static(frontendDir));
+}
 
 // 404 handler for unknown routes
 app.use((req, res) => {

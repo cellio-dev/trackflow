@@ -507,6 +507,71 @@ async function loadOrBuildGlobalGenrePayload(gid) {
   return built;
 }
 
+/** Space Deezer calls when warming many genre caches in one job run. */
+const GENRE_GLOBAL_CACHE_STAGGER_MS = 900;
+
+/**
+ * Refetch one genre from Deezer and store under discover_global_cache (ignores TTL).
+ * Used by discover cache refresh job so genre.html first visits are usually cache hits.
+ */
+async function buildAndStoreGlobalGenreCache(gid) {
+  const g = Math.floor(Number(gid));
+  if (!Number.isInteger(g) || g <= 0) {
+    return;
+  }
+  const built = await fetchAndEnrichGlobalGenrePayload(g);
+  upsertGlobalStmt.run(genreCacheKey(g), JSON.stringify(built));
+}
+
+function collectGenreIdsForGlobalCacheWarm(homePayload) {
+  const ids = new Set();
+  const genres = homePayload && Array.isArray(homePayload.genres) ? homePayload.genres : [];
+  for (const g of genres) {
+    const id = g?.id != null ? Math.floor(Number(g.id)) : NaN;
+    if (Number.isInteger(id) && id > 0) {
+      ids.add(id);
+    }
+  }
+  if (ids.size > 0) {
+    return [...ids];
+  }
+  for (const id of deezer.POPULAR_GENRE_IDS || []) {
+    const n = Math.floor(Number(id));
+    if (Number.isInteger(n) && n > 0) {
+      ids.add(n);
+    }
+  }
+  return [...ids];
+}
+
+/**
+ * After global home is rebuilt, warm every Discover genre page payload in SQLite
+ * so GET /api/discover/genre/:id avoids cold Deezer fetches on first user visit.
+ * @returns {Promise<{ warmed: number, failed: number }>}
+ */
+async function refreshDiscoverGenreGlobalCaches(homePayload) {
+  const genreIds = collectGenreIdsForGlobalCacheWarm(homePayload);
+  if (genreIds.length === 0) {
+    return { warmed: 0, failed: 0 };
+  }
+  let warmed = 0;
+  let failed = 0;
+  for (let i = 0; i < genreIds.length; i += 1) {
+    if (i > 0) {
+      await new Promise((r) => setTimeout(r, GENRE_GLOBAL_CACHE_STAGGER_MS));
+    }
+    const gid = genreIds[i];
+    try {
+      await buildAndStoreGlobalGenreCache(gid);
+      warmed += 1;
+    } catch (e) {
+      failed += 1;
+      console.warn('[discoverCache] genre global cache warm failed', gid, e?.message || e);
+    }
+  }
+  return { warmed, failed };
+}
+
 async function getDiscoverGenreResponseForUser(userId, genreId) {
   const gid = Number(genreId);
   if (!Number.isInteger(gid) || gid <= 0) {
@@ -584,6 +649,7 @@ module.exports = {
   getDiscoverHomeResponseForUser,
   getDiscoverGenreResponseForUser,
   buildAndStoreGlobalHomeCache,
+  refreshDiscoverGenreGlobalCaches,
   rebuildUserDiscoverCacheRow,
   loadOrBuildGlobalHomePayload,
   GLOBAL_HOME_KEY,

@@ -1,0 +1,13 @@
+.git
+.github
+.cursor
+**/.env
+**/.env.*
+**/node_modules
+frontend/dist
+backend/db/*.sqlite
+backend/db/*.sqlite-journal
+backend/db/*.sqlite-wal
+backend/db/*.sqlite-shm
+*.md
+terminals

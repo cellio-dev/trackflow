@@ -10,6 +10,8 @@ const DEFAULT_MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024;
 const settingsRowStmt = getDb().prepare(`
   SELECT
     library_path,
+    primary_library_path,
+    library_scan_paths_json,
     slskd_local_download_path,
     plex_url,
     plex_token,
@@ -78,7 +80,12 @@ function boolFromDbInt(dbVal, envKey, defaultValue = true) {
 }
 
 function getLibraryPath() {
-  return strFrom(row()?.library_path, 'LIBRARY_PATH');
+  const r = row();
+  const fromPrimary = strFrom(r?.primary_library_path, 'PRIMARY_LIBRARY_PATH');
+  if (fromPrimary) {
+    return fromPrimary;
+  }
+  return strFrom(r?.library_path, 'LIBRARY_PATH');
 }
 
 function getSlskdLocalDownloadPath() {

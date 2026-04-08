@@ -11,6 +11,7 @@
     'Available',
     'Canceled',
     'Denied',
+    'Complete',
   ]);
 
   const ADMIN_STATUSES = Object.freeze([
@@ -21,15 +22,9 @@
     'Queued Remotely',
     'Failed',
     'Complete',
-    'Plex Pending',
     'Canceled',
     'Denied',
   ]);
-
-  const DEFAULT_SETTINGS = {
-    plex_integration_enabled: false,
-    require_plex_for_available: false,
-  };
 
   function resolveFileMatchForDisplay(row) {
     if (row.library_file_match === true || row.library_file_match === false) {
@@ -38,33 +33,20 @@
     return false;
   }
 
-  function isUserFacingLibraryAvailable(row, availabilitySettings) {
-    const file = resolveFileMatchForDisplay(row);
-    const plex =
-      row.library_plex_available === true || row.library_plex_available === false
-        ? row.library_plex_available
-        : String(row.plex_status || '') === 'found';
-    const plexOn = Boolean(availabilitySettings.plex_integration_enabled);
-    if (!plexOn) {
-      return Boolean(file);
-    }
-    if (availabilitySettings.require_plex_for_available) {
-      return Boolean(plex);
-    }
-    return Boolean(file || plex);
+  function isUserFacingLibraryAvailable(row) {
+    return Boolean(resolveFileMatchForDisplay(row));
   }
 
   /**
-   * @param {object} row — request-like: status, cancelled, plex_status, processing_phase, library_file_match?
+   * @param {object} row — request-like: status, cancelled, processing_phase, library_file_match?
    * @param {object} [availabilitySettings] — merged with defaults (same shape as TrackFlowRequestDisplay settings)
    * @returns {{ displayStatus: string, processingStatus: string }}
    */
-  function computeDisplayFields(row, availabilitySettings) {
+  function computeDisplayFields(row, _availabilitySettings) {
     if (!row || typeof row !== 'object') {
       return { displayStatus: '', processingStatus: '' };
     }
 
-    const s = { ...DEFAULT_SETTINGS, ...(availabilitySettings || {}) };
     const status = String(row.status || '');
     const cancelled = Number(row.cancelled) === 1;
     const phase = row.processing_phase != null ? String(row.processing_phase) : '';
@@ -102,19 +84,11 @@
     }
 
     if (status === 'completed' || status === 'available') {
-      const plexOn = Boolean(s.plex_integration_enabled);
-      const plexFound = String(row.plex_status || '') === 'found';
-      const libAvail = isUserFacingLibraryAvailable(row, s);
-
+      const libAvail = isUserFacingLibraryAvailable(row);
       if (libAvail || status === 'available') {
         return { displayStatus: 'Available', processingStatus: 'Complete' };
       }
-
-      if (plexOn && !plexFound) {
-        return { displayStatus: 'Processing', processingStatus: 'Plex Pending' };
-      }
-
-      return { displayStatus: 'Available', processingStatus: 'Complete' };
+      return { displayStatus: 'Complete', processingStatus: 'Complete' };
     }
 
     return { displayStatus: '', processingStatus: '' };

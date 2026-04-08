@@ -55,6 +55,8 @@ const updateSettingsStmt = db.prepare(`
       file_naming_pattern = ?,
       plex_scan_interval_minutes = ?,
       library_scan_interval_minutes = ?,
+      primary_library_path = ?,
+      library_scan_paths_json = ?,
       library_path = ?,
       slskd_local_download_path = ?,
       plex_url = ?,
@@ -270,6 +272,28 @@ function int01(value, defaultOne = true) {
   return Number(value) === 0 ? 0 : 1;
 }
 
+function effectivePrimaryLibraryPath(row) {
+  const a = row?.primary_library_path != null ? String(row.primary_library_path).trim() : '';
+  if (a) {
+    return a;
+  }
+  const b = row?.library_path != null ? String(row.library_path).trim() : '';
+  return b;
+}
+
+function parseLibraryScanPathsFromSettingsRow(row) {
+  let raw = row?.library_scan_paths_json;
+  if (raw == null || String(raw).trim() === '') {
+    raw = '[]';
+  }
+  try {
+    const parsed = JSON.parse(String(raw));
+    return Array.isArray(parsed) ? parsed.map((x) => String(x).trim()).filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
 function rowToJson(row) {
   const preferredFormat =
     normalizePreferredFormat(row?.preferred_format) || DEFAULT_PREFERRED_FORMAT;
@@ -287,7 +311,6 @@ function rowToJson(row) {
     max_concurrent_downloads: clampMaxConcurrentDownloads(row?.max_concurrent_downloads),
     max_download_attempts: clampMaxDownloadAttempts(row?.max_download_attempts),
     plex_integration_enabled: Boolean(Number(row?.plex_integration_enabled)),
-    require_plex_for_available: Boolean(Number(row?.require_plex_for_available)),
     file_naming_pattern: fnp,
     file_naming_preview:
       preview.ok && preview.relativePath ? preview.relativePath.split(path.sep).join('/') : null,
@@ -298,7 +321,9 @@ function rowToJson(row) {
       5,
       1440,
     ),
-    library_path: typeof row?.library_path === 'string' ? row.library_path : '',
+    primary_library_path: effectivePrimaryLibraryPath(row),
+    library_paths: parseLibraryScanPathsFromSettingsRow(row),
+    library_path: effectivePrimaryLibraryPath(row),
     slskd_local_download_path:
       typeof row?.slskd_local_download_path === 'string' ? row.slskd_local_download_path : '',
     plex_url: typeof row?.plex_url === 'string' ? row.plex_url.trim().replace(/\/+$/, '') : '',
@@ -440,6 +465,21 @@ function persistSettingsFromRow(row) {
     }
   }
 
+  const primaryForDb =
+    row?.primary_library_path != null && String(row.primary_library_path).trim() !== ''
+      ? String(row.primary_library_path).trim()
+      : row?.library_path == null || String(row.library_path).trim() === ''
+        ? null
+        : String(row.library_path).trim();
+  let libraryScanPathsJson = '[]';
+  if (row?.library_scan_paths_json != null && String(row.library_scan_paths_json).trim() !== '') {
+    libraryScanPathsJson = String(row.library_scan_paths_json);
+  } else if (Array.isArray(row?.library_paths)) {
+    libraryScanPathsJson = JSON.stringify(
+      row.library_paths.map((x) => String(x).trim()).filter(Boolean),
+    );
+  }
+
   updateSettingsStmt.run(
     row?.auto_approve ? 1 : 0,
     preferredFormat,
@@ -447,14 +487,14 @@ function persistSettingsFromRow(row) {
     clampMaxDownloadAttempts(row?.max_download_attempts),
     tmm,
     row?.plex_integration_enabled ? 1 : 0,
-    row?.plex_integration_enabled ? 1 : 0,
-    row?.require_plex_for_available ? 1 : 0,
+    0,
+    0,
     fnp,
     clampScanIntervalMinutes(row?.plex_scan_interval_minutes, 30, 5, 720),
     clampScanIntervalMinutes(row?.library_scan_interval_minutes, 60, 5, 1440),
-    row?.library_path == null || String(row.library_path).trim() === ''
-      ? null
-      : String(row.library_path).trim(),
+    primaryForDb,
+    libraryScanPathsJson,
+    primaryForDb,
     row?.slskd_local_download_path == null || String(row.slskd_local_download_path).trim() === ''
       ? null
       : String(row.slskd_local_download_path).trim(),
@@ -612,11 +652,12 @@ router.post('/', (req, res) => {
   const hasMaxConcurrent = Object.prototype.hasOwnProperty.call(body, 'max_concurrent_downloads');
   const hasMaxAttempts = Object.prototype.hasOwnProperty.call(body, 'max_download_attempts');
   const hasPlexInt = Object.prototype.hasOwnProperty.call(body, 'plex_integration_enabled');
-  const hasReqPlex = Object.prototype.hasOwnProperty.call(body, 'require_plex_for_available');
   const hasFileNaming = Object.prototype.hasOwnProperty.call(body, 'file_naming_pattern');
   const hasPlexScanMin = Object.prototype.hasOwnProperty.call(body, 'plex_scan_interval_minutes');
   const hasLibScanMin = Object.prototype.hasOwnProperty.call(body, 'library_scan_interval_minutes');
   const hasLibraryPath = Object.prototype.hasOwnProperty.call(body, 'library_path');
+  const hasPrimaryLibraryPath = Object.prototype.hasOwnProperty.call(body, 'primary_library_path');
+  const hasLibraryPaths = Object.prototype.hasOwnProperty.call(body, 'library_paths');
   const hasSlskdDl = Object.prototype.hasOwnProperty.call(body, 'slskd_local_download_path');
   const hasPlexUrl = Object.prototype.hasOwnProperty.call(body, 'plex_url');
   const hasPlexToken = Object.prototype.hasOwnProperty.call(body, 'plex_token');
@@ -731,6 +772,8 @@ router.post('/', (req, res) => {
 
   const hasAnyIntegration =
     hasLibraryPath ||
+    hasPrimaryLibraryPath ||
+    hasLibraryPaths ||
     hasSlskdDl ||
     hasPlexUrl ||
     hasPlexToken ||
@@ -763,7 +806,6 @@ router.post('/', (req, res) => {
     !hasMaxConcurrent &&
     !hasMaxAttempts &&
     !hasPlexInt &&
-    !hasReqPlex &&
     !hasFileNaming &&
     !hasPlexScanMin &&
     !hasLibScanMin &&
@@ -827,12 +869,6 @@ router.post('/', (req, res) => {
       }
       next.plex_integration_enabled = body.plex_integration_enabled ? 1 : 0;
     }
-    if (hasReqPlex) {
-      if (typeof body.require_plex_for_available !== 'boolean') {
-        return res.status(400).json({ error: 'require_plex_for_available must be a boolean' });
-      }
-      next.require_plex_for_available = body.require_plex_for_available ? 1 : 0;
-    }
     if (hasFileNaming) {
       if (typeof body.file_naming_pattern !== 'string') {
         return res.status(400).json({ error: 'file_naming_pattern must be a string' });
@@ -864,6 +900,24 @@ router.post('/', (req, res) => {
         body.library_path == null || String(body.library_path).trim() === ''
           ? null
           : String(body.library_path).trim();
+      next.primary_library_path = next.library_path;
+    }
+    if (hasPrimaryLibraryPath) {
+      if (body.primary_library_path == null || String(body.primary_library_path).trim() === '') {
+        next.primary_library_path = null;
+        next.library_path = null;
+      } else {
+        next.primary_library_path = String(body.primary_library_path).trim();
+        next.library_path = next.primary_library_path;
+      }
+    }
+    if (hasLibraryPaths) {
+      if (!Array.isArray(body.library_paths)) {
+        return res.status(400).json({ error: 'library_paths must be an array of strings' });
+      }
+      const cleaned = body.library_paths.map((x) => String(x).trim()).filter(Boolean);
+      next.library_paths = cleaned;
+      next.library_scan_paths_json = JSON.stringify(cleaned);
     }
     if (hasSlskdDl) {
       next.slskd_local_download_path =
@@ -1232,8 +1286,8 @@ router.post('/', (req, res) => {
       next.status_email_interval_minutes = clampStatusEmailIntervalMinutes(n);
     }
 
-    // DB column kept for compatibility; always mirrors Plex integration.
-    next.plex_detection_enabled = next.plex_integration_enabled ? 1 : 0;
+    next.plex_detection_enabled = 0;
+    next.require_plex_for_available = 0;
 
     persistSettingsFromRow(next);
 

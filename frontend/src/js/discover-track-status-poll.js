@@ -18,16 +18,43 @@ export function collectTrackListDeezerIds(listEls) {
   return [...ids];
 }
 
-export async function fetchDiscoverTrackStatuses(ids) {
-  const unique = [...new Set(ids.map((x) => String(x).trim()).filter(Boolean))].slice(0, MAX_IDS);
-  if (unique.length === 0) {
+/**
+ * Stubs for track-status enrichment: include artist/title/duration from the card so library matching
+ * works for file-backed rows without trackflow_id (e.g. extra scan roots).
+ */
+function collectTrackStubsForStatusPoll(listEls) {
+  const out = [];
+  const seen = new Set();
+  outer: for (const ul of listEls) {
+    if (!ul) continue;
+    for (const li of ul.querySelectorAll('li[data-trackflow-id]')) {
+      if (out.length >= MAX_IDS) break outer;
+      const idRaw = li.getAttribute('data-trackflow-id');
+      const id = idRaw != null ? String(idRaw).trim() : '';
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      const artist = li.getAttribute('data-tf-enrich-artist') || '';
+      const title = li.getAttribute('data-tf-enrich-title') || '';
+      const durRaw = li.getAttribute('data-tf-enrich-duration');
+      const duration =
+        durRaw != null && String(durRaw).trim() !== '' && Number.isFinite(Number(durRaw))
+          ? Number(durRaw)
+          : null;
+      out.push({ id, artist, title, duration });
+    }
+  }
+  return out;
+}
+
+export async function fetchDiscoverTrackStatuses(stubs) {
+  if (!Array.isArray(stubs) || stubs.length === 0) {
     return { byId: {} };
   }
   const res = await fetch('/api/discover/track-status', {
     method: 'POST',
     credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ids: unique }),
+    body: JSON.stringify({ tracks: stubs }),
   });
   if (!res.ok) {
     throw new Error(`track-status ${res.status}`);
@@ -65,11 +92,11 @@ export function startDiscoverTrackStatusPolling(listEls, opts = {}) {
 
   async function tick() {
     if (stopped || document.visibilityState !== 'visible' || !shouldPoll()) return;
-    const ids = collectTrackListDeezerIds(listEls);
+    const stubs = collectTrackStubsForStatusPoll(listEls);
     const tasks = [];
-    if (ids.length > 0) {
+    if (stubs.length > 0) {
       tasks.push(
-        fetchDiscoverTrackStatuses(ids)
+        fetchDiscoverTrackStatuses(stubs)
           .then((data) => {
             if (data?.byId) applyStatusPatchesToTrackLists(listEls, data.byId);
           })

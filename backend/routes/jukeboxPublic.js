@@ -473,55 +473,21 @@ function streamMime(filePath) {
   return 'audio/mpeg';
 }
 
-function streamHandler(req, res) {
-  const jukeboxId = Number(req.query.jukebox_id);
-  const libraryTrackId = Number(req.params.libraryTrackId);
-  const token = (req.query.token || '').trim();
-  const mode = (req.query.mode || 'guest').trim();
-  const row = jukeSvc.getJukeboxById(jukeboxId);
-  if (!row) {
-    return res.status(404).end();
-  }
-  if (mode === 'host') {
-    if (!req.session || req.session.userId == null) {
-      return res.status(403).end();
-    }
-    if (
-      String(row.user_id) !== sessionUserIdString(req) &&
-      req.session.role !== 'admin'
-    ) {
-      return res.status(403).end();
-    }
-    if (!jukeSvc.canHostStreamTrack(jukeboxId, libraryTrackId)) {
-      return res.status(403).end();
-    }
-  } else {
-    if (!req.session || req.session.userId == null) {
-      return res.status(403).end();
-    }
-    if (!sessionUserHasJukeboxEnabled(req)) {
-      return res.status(403).end();
-    }
-    if (!jukeSvc.assertGuestToken(row, token) || !jukeSvc.canGuestStreamTrack(jukeboxId, libraryTrackId)) {
-      return res.status(403).end();
-    }
-  }
-  const filePath = jukeSvc.resolveStreamPath(libraryTrackId);
-  if (!filePath) {
-    return res.status(404).end();
-  }
+function streamLocalLibraryFile(filePath, req, res) {
   const mime = streamMime(filePath);
   const stat = fs.statSync(filePath);
   const range = req.headers.range;
   if (range) {
     const m = /^bytes=(\d*)-(\d*)$/.exec(range);
     if (!m) {
-      return res.status(416).end();
+      res.status(416).end();
+      return;
     }
     const start = m[1] ? parseInt(m[1], 10) : 0;
     const end = m[2] ? parseInt(m[2], 10) : stat.size - 1;
     if (start >= stat.size || end < start) {
-      return res.status(416).end();
+      res.status(416).end();
+      return;
     }
     const chunkEnd = Math.min(end, stat.size - 1);
     const len = chunkEnd - start + 1;
@@ -539,8 +505,62 @@ function streamHandler(req, res) {
   fs.createReadStream(filePath).pipe(res);
 }
 
+function streamHandlerAsync(req, res) {
+  const jukeboxId = Number(req.query.jukebox_id);
+  const libraryTrackId = Number(req.params.libraryTrackId);
+  const token = (req.query.token || '').trim();
+  const mode = (req.query.mode || 'guest').trim();
+  const row = jukeSvc.getJukeboxById(jukeboxId);
+  if (!row) {
+    res.status(404).end();
+    return;
+  }
+  if (mode === 'host') {
+    if (!req.session || req.session.userId == null) {
+      res.status(403).end();
+      return;
+    }
+    if (
+      String(row.user_id) !== sessionUserIdString(req) &&
+      req.session.role !== 'admin'
+    ) {
+      res.status(403).end();
+      return;
+    }
+    if (!jukeSvc.canHostStreamTrack(jukeboxId, libraryTrackId)) {
+      res.status(403).end();
+      return;
+    }
+  } else {
+    if (!req.session || req.session.userId == null) {
+      res.status(403).end();
+      return;
+    }
+    if (!sessionUserHasJukeboxEnabled(req)) {
+      res.status(403).end();
+      return;
+    }
+    if (!jukeSvc.assertGuestToken(row, token) || !jukeSvc.canGuestStreamTrack(jukeboxId, libraryTrackId)) {
+      res.status(403).end();
+      return;
+    }
+  }
+  const filePath = jukeSvc.resolveStreamPath(libraryTrackId);
+  if (filePath) {
+    streamLocalLibraryFile(filePath, req, res);
+    return;
+  }
+  res.status(404).end();
+}
+
 router.use('/guest/:jukeboxId', guestRouter);
 router.use('/host/:jukeboxId', hostRouter);
-router.get('/stream/:libraryTrackId', streamHandler);
+router.get('/stream/:libraryTrackId', (req, res, next) => {
+  try {
+    streamHandlerAsync(req, res);
+  } catch (e) {
+    next(e);
+  }
+});
 
 module.exports = router;

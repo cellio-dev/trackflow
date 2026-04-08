@@ -1,10 +1,11 @@
 /**
  * Recurring library folder scan: sync `tracks` with files on disk (db_exists, metadata).
+ * Scans primary download folder + optional extra roots (see libraryPaths).
  */
 
 const fs = require('fs');
 const path = require('path');
-const { getLibraryPath } = require('../services/libraryMove');
+const { getLibraryScanRoots } = require('../services/libraryPaths');
 const { readTagsForFileSync } = require('../services/mutagenTags');
 const { upsertTrackFromLibraryScan, markLibraryFilesMissing } = require('../services/tracksDb');
 
@@ -39,21 +40,22 @@ function listLibraryAudioFiles(rootDir) {
   return out;
 }
 
-async function runLibraryScanJob() {
-  const root = getLibraryPath();
-  if (!root) {
-    return { ok: false, reason: 'no library path' };
-  }
-  const resolved = path.resolve(root);
+/**
+ * @param {string} rootAbs
+ * @param {string} relUnix — stored in DB (may include S1/ prefix)
+ */
+function scanOneRoot(rootAbs, relUnix) {
+  const resolved = path.resolve(rootAbs);
   if (!fs.existsSync(resolved)) {
-    return { ok: false, reason: 'library missing' };
+    return [];
   }
   const files = listLibraryAudioFiles(resolved);
-  const seenUnix = [];
+  const seen = [];
   for (const abs of files) {
     const rel = path.relative(resolved, abs);
-    const relUnix = rel.split(path.sep).join('/');
-    seenUnix.push(relUnix);
+    const inner = rel.split(path.sep).join('/');
+    const fullRel = relUnix ? `${relUnix}${inner}` : inner;
+    seen.push(fullRel);
     const raw = readTagsForFileSync(abs);
     const meta =
       raw && raw.ok
@@ -73,10 +75,24 @@ async function runLibraryScanJob() {
             year: null,
             duration_seconds: null,
           };
-    upsertTrackFromLibraryScan(meta, relUnix);
+    upsertTrackFromLibraryScan(meta, fullRel);
   }
-  markLibraryFilesMissing(seenUnix);
-  return { ok: true, files: files.length };
+  return seen;
+}
+
+async function runLibraryScanJob() {
+  const roots = getLibraryScanRoots();
+  if (!roots.length) {
+    return { ok: false, reason: 'no library path' };
+  }
+  const allSeen = [];
+  for (const root of roots) {
+    const prefix = root.prefix || '';
+    const chunk = scanOneRoot(root.abs, prefix);
+    allSeen.push(...chunk);
+  }
+  markLibraryFilesMissing(allSeen);
+  return { ok: true, files: allSeen.length, roots: roots.length };
 }
 
 module.exports = { runLibraryScanJob, listLibraryAudioFiles };

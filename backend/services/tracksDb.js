@@ -1,5 +1,5 @@
 /**
- * Tracks table: authoritative library + Plex availability (no real-time FS/Plex in request/search).
+ * Tracks table: library files from disk scans + optional Plex rating keys for playlist sync (not availability).
  */
 
 const path = require('path');
@@ -87,29 +87,69 @@ function filenameMatch(probe, row) {
 }
 
 function rowIsPresent(row) {
-  return Number(row.db_exists) === 1 || Number(row.plex_available) === 1;
+  return Number(row.db_exists) === 1;
 }
 
 const getByFlowStmt = db.prepare(`
-  SELECT id, trackflow_id, artist, title, album, year, duration_seconds, file_path, db_exists, plex_available, source, updated_at
+  SELECT id, trackflow_id, artist, title, album, year, duration_seconds, file_path, db_exists, plex_rating_key, source, updated_at
   FROM tracks
-  WHERE trackflow_id = ? AND (db_exists = 1 OR plex_available = 1)
+  WHERE trackflow_id = ? AND db_exists = 1
   LIMIT 1
 `);
 
 const loadPoolStmt = db.prepare(`
-  SELECT id, trackflow_id, artist, title, album, year, duration_seconds, file_path, db_exists, plex_available, source, updated_at
+  SELECT id, trackflow_id, artist, title, album, year, duration_seconds, file_path, db_exists, plex_rating_key, source, updated_at
   FROM tracks
-  WHERE db_exists = 1 OR plex_available = 1
+  WHERE db_exists = 1
   ORDER BY id DESC
   LIMIT ${MAX_POOL_ROWS}
 `);
+
+/** Merge duplicate `tracks` rows that share `trackflow_id` (file + optional plex_rating_key). */
+function mergeTrackPresenceRows(rows) {
+  if (!rows || rows.length === 0) {
+    return null;
+  }
+  const withFile = rows.find((r) => Number(r.db_exists) === 1 && r.file_path);
+  const withKey = rows.find((r) => r.plex_rating_key != null && String(r.plex_rating_key).trim() !== '');
+  const base = withFile || withKey || rows[0];
+  const db_exists = rows.some((r) => Number(r.db_exists) === 1) ? 1 : 0;
+  let plex_rating_key = null;
+  if (withKey) {
+    plex_rating_key = String(withKey.plex_rating_key).trim();
+  } else {
+    const r = rows.find((x) => x.plex_rating_key != null && String(x.plex_rating_key).trim() !== '');
+    plex_rating_key = r ? String(r.plex_rating_key).trim() : null;
+  }
+  const file_path = withFile ? withFile.file_path : base.file_path;
+  return {
+    ...base,
+    id: base.id,
+    db_exists,
+    file_path,
+    plex_rating_key,
+  };
+}
+
+function buildFlowPresenceMap(pool) {
+  const m = new Map();
+  for (const row of pool) {
+    if (!rowIsPresent(row)) {
+      continue;
+    }
+    const k = row.trackflow_id != null ? String(row.trackflow_id).trim() : '';
+    if (!k) {
+      continue;
+    }
+    m.set(k, { db_exists: 1 });
+  }
+  return m;
+}
 
 function normPathKey(p) {
   return String(p || '').replace(/\\/g, '/');
 }
 
-/** Avoid two rows with the same trackflow_id when the canonical row is this file_path. */
 function releaseTrackflowIdFromOtherPaths(trackflowId, relativePathUnix) {
   const flow = trackflowId != null ? String(trackflowId).trim() : '';
   if (!flow) {
@@ -130,8 +170,8 @@ function upsertByTrackflowId(data) {
   releaseTrackflowIdFromOtherPaths(data.trackflow_id, data.file_path);
   db.prepare(
     `
-    INSERT INTO tracks (trackflow_id, artist, title, album, year, duration_seconds, file_path, db_exists, plex_available, source, updated_at)
-    VALUES (@trackflow_id, @artist, @title, @album, @year, @duration_seconds, @file_path, @db_exists, @plex_available, @source, datetime('now'))
+    INSERT INTO tracks (trackflow_id, artist, title, album, year, duration_seconds, file_path, db_exists, source, updated_at)
+    VALUES (@trackflow_id, @artist, @title, @album, @year, @duration_seconds, @file_path, @db_exists, @source, datetime('now'))
     ON CONFLICT(file_path) DO UPDATE SET
       trackflow_id = excluded.trackflow_id,
       artist = excluded.artist,
@@ -140,7 +180,6 @@ function upsertByTrackflowId(data) {
       year = excluded.year,
       duration_seconds = excluded.duration_seconds,
       db_exists = excluded.db_exists,
-      plex_available = excluded.plex_available,
       source = excluded.source,
       updated_at = datetime('now')
   `,
@@ -148,7 +187,7 @@ function upsertByTrackflowId(data) {
 }
 
 /**
- * After download: file in library, tags written. Verifies paths; sets db_exists, plex_available=false.
+ * After download: file in library, tags written.
  */
 function upsertTrackAfterDownload({
   libraryRoot,
@@ -174,8 +213,8 @@ function upsertTrackAfterDownload({
   if (!flow) {
     db.prepare(
       `
-      INSERT INTO tracks (trackflow_id, artist, title, album, year, duration_seconds, file_path, db_exists, plex_available, source, updated_at)
-      VALUES (NULL, ?, ?, ?, ?, ?, ?, 1, 0, 'download', datetime('now'))
+      INSERT INTO tracks (trackflow_id, artist, title, album, year, duration_seconds, file_path, db_exists, source, updated_at)
+      VALUES (NULL, ?, ?, ?, ?, ?, ?, 1, 'download', datetime('now'))
       ON CONFLICT(file_path) DO UPDATE SET
         artist = excluded.artist,
         title = excluded.title,
@@ -183,7 +222,6 @@ function upsertTrackAfterDownload({
         year = excluded.year,
         duration_seconds = excluded.duration_seconds,
         db_exists = 1,
-        plex_available = 0,
         source = excluded.source,
         updated_at = datetime('now'),
         trackflow_id = COALESCE(tracks.trackflow_id, excluded.trackflow_id)
@@ -212,20 +250,21 @@ function upsertTrackAfterDownload({
         : null,
     file_path: relUnix,
     db_exists: 1,
-    plex_available: 0,
     source: 'download',
   });
 }
 
 function findPresentTrackForProbe(probe, pool) {
+  const rows = pool || loadPoolStmt.all();
   const flow = probe.deezer_id != null ? String(probe.deezer_id).trim() : '';
   if (flow) {
-    const direct = getByFlowStmt.get(flow);
-    if (direct && rowIsPresent(direct)) {
-      return direct;
+    const same = rows.filter(
+      (r) => String(r.trackflow_id || '').trim() === flow && rowIsPresent(r),
+    );
+    if (same.length > 0) {
+      return mergeTrackPresenceRows(same);
     }
   }
-  const rows = pool || loadPoolStmt.all();
   for (const row of rows) {
     if (!rowIsPresent(row)) {
       continue;
@@ -245,23 +284,13 @@ function findPresentTrackForProbe(probe, pool) {
   return null;
 }
 
-/**
- * Duplicate guard for new requests / follow sync: block if the track is already represented
- * in `tracks` with a file on disk and/or Plex index. `require_plex_for_available` affects
- * user-facing “available” UI only (see libraryAvailability), not this check.
- */
-function trackBlocksNewRequest(probe, settings) {
+/** Duplicate guard: block if the track already has a file-backed row in `tracks`. */
+function trackBlocksNewRequest(probe) {
   const row = findPresentTrackForProbe(toProbe(probe));
   if (!row) {
     return false;
   }
-  const dbOk = Number(row.db_exists) === 1;
-  const plexOk = Number(row.plex_available) === 1;
-  const plexOn = Boolean(settings?.plex_integration_enabled);
-  if (!plexOn) {
-    return dbOk;
-  }
-  return dbOk || plexOk;
+  return Number(row.db_exists) === 1;
 }
 
 function toProbe(row) {
@@ -286,28 +315,17 @@ function fileExistsInLibraryForRequestSync(row, pool) {
   return r != null && Number(r.db_exists) === 1;
 }
 
-/** One load of the fuzzy-match pool (up to MAX_POOL_ROWS). Reuse across many probes to avoid O(n) full-table reads. */
 function loadTracksPresencePool() {
   return loadPoolStmt.all();
 }
 
 function batchDiscoverFromDb(tracks) {
   const pool = loadPoolStmt.all();
-  /** Pool is `ORDER BY id DESC` (newest first). Keep first row per trackflow_id so stale duplicates do not overwrite the canonical row (fixes poll stubs with `{ id }` only). */
-  const byFlow = new Map();
-  for (const row of pool) {
-    if (row.trackflow_id) {
-      const k = String(row.trackflow_id);
-      if (!byFlow.has(k)) {
-        byFlow.set(k, row);
-      }
-    }
-  }
+  const flowPresence = buildFlowPresenceMap(pool);
   return tracks.map((track) => {
     const flow = track.id != null ? String(track.id).trim() : '';
-    if (flow && byFlow.has(flow)) {
-      const r = byFlow.get(flow);
-      return Number(r.db_exists) === 1;
+    if (flow && flowPresence.has(flow)) {
+      return true;
     }
     const r = findPresentTrackForProbe(
       {
@@ -325,38 +343,6 @@ function batchDiscoverFromDb(tracks) {
   });
 }
 
-function batchPlexFlagsFromDb(tracks) {
-  const pool = loadPoolStmt.all();
-  const byFlow = new Map();
-  for (const row of pool) {
-    if (row.trackflow_id) {
-      const k = String(row.trackflow_id);
-      if (!byFlow.has(k)) {
-        byFlow.set(k, row);
-      }
-    }
-  }
-  return tracks.map((track) => {
-    const flow = track.id != null ? String(track.id).trim() : '';
-    if (flow && byFlow.has(flow)) {
-      return Number(byFlow.get(flow).plex_available) === 1;
-    }
-    const r = findPresentTrackForProbe(
-      {
-        deezer_id: track.id,
-        artist: track.artist,
-        title: track.title,
-        duration_seconds:
-          track.duration != null && Number.isFinite(Number(track.duration))
-            ? Math.round(Number(track.duration))
-            : null,
-      },
-      pool,
-    );
-    return r != null && Number(r.plex_available) === 1;
-  });
-}
-
 function enrichRequestRowFromTracksSync(row) {
   const probe = {
     deezer_id: row.deezer_id,
@@ -368,7 +354,6 @@ function enrichRequestRowFromTracksSync(row) {
   return {
     ...row,
     library_file_match: match != null && Number(match.db_exists) === 1,
-    library_plex_available: match != null && Number(match.plex_available) === 1,
   };
 }
 
@@ -430,14 +415,13 @@ function upsertTrackFromLibraryScan(meta, relativePathUnix) {
     duration_seconds,
     file_path: rel,
     db_exists: 1,
-    plex_available: 0,
     source: 'library_scan',
   };
 
   db.prepare(
     `
-    INSERT INTO tracks (trackflow_id, artist, title, album, year, duration_seconds, file_path, db_exists, plex_available, source, updated_at)
-    VALUES (@trackflow_id, @artist, @title, @album, @year, @duration_seconds, @file_path, @db_exists, @plex_available, @source, datetime('now'))
+    INSERT INTO tracks (trackflow_id, artist, title, album, year, duration_seconds, file_path, db_exists, source, updated_at)
+    VALUES (@trackflow_id, @artist, @title, @album, @year, @duration_seconds, @file_path, @db_exists, @source, datetime('now'))
     ON CONFLICT(file_path) DO UPDATE SET
       trackflow_id = COALESCE(NULLIF(excluded.trackflow_id, ''), tracks.trackflow_id),
       artist = excluded.artist,
@@ -446,7 +430,6 @@ function upsertTrackFromLibraryScan(meta, relativePathUnix) {
       year = excluded.year,
       duration_seconds = excluded.duration_seconds,
       db_exists = 1,
-      plex_available = tracks.plex_available,
       source = excluded.source,
       updated_at = datetime('now')
   `,
@@ -464,24 +447,19 @@ function markLibraryFilesMissing(seenRelativePathsUnix) {
   }
 }
 
-/** Plex scan: reset plex flags then caller sets true for matches */
-function clearAllPlexAvailableFlags() {
-  db.prepare(`UPDATE tracks SET plex_available = 0, updated_at = datetime('now') WHERE plex_available = 1`).run();
-}
-
-function setPlexAvailableForTrackRow(id, value) {
-  db.prepare(`UPDATE tracks SET plex_available = ?, updated_at = datetime('now') WHERE id = ?`).run(
-    value ? 1 : 0,
-    id,
-  );
-}
-
-function insertOrUpdateTrackFromPlex(meta, plexDurationSec) {
+/**
+ * Plex metadata sync for playlist mapping only: update `plex_rating_key` on existing file-backed rows.
+ * Does not create Plex-only tracks or affect availability.
+ */
+function applyPlexRatingKeyFromPlexMetadata(meta, plexDurationSec) {
   const flow = meta.trackflow_id != null ? String(meta.trackflow_id).trim() : '';
   const rkRaw = meta.plex_rating_key != null ? String(meta.plex_rating_key).trim() : '';
   const plexRatingKey = rkRaw || null;
+  if (!plexRatingKey) {
+    return null;
+  }
   const pool = loadPoolStmt.all();
-  let row = flow ? db.prepare(`SELECT * FROM tracks WHERE trackflow_id = ?`).get(flow) : null;
+  let row = flow ? db.prepare(`SELECT * FROM tracks WHERE trackflow_id = ? AND db_exists = 1`).get(flow) : null;
   if (!row) {
     row = findPresentTrackForProbe(
       {
@@ -493,16 +471,17 @@ function insertOrUpdateTrackFromPlex(meta, plexDurationSec) {
       pool,
     );
   }
+  if (!row || Number(row.db_exists) !== 1) {
+    return null;
+  }
   const albumArtist =
     meta.album_artist != null && String(meta.album_artist).trim() !== ''
       ? String(meta.album_artist).trim()
       : null;
 
-  if (row) {
-    db.prepare(
-      `
+  db.prepare(
+    `
       UPDATE tracks SET
-        plex_available = 1,
         artist = COALESCE(NULLIF(?, ''), artist),
         title = COALESCE(NULLIF(?, ''), title),
         album = COALESCE(?, album),
@@ -512,56 +491,29 @@ function insertOrUpdateTrackFromPlex(meta, plexDurationSec) {
         updated_at = datetime('now')
       WHERE id = ?
     `,
-    ).run(
-      String(meta.artist || '').trim(),
-      String(meta.title || '').trim(),
-      meta.album != null ? String(meta.album).trim() : null,
-      albumArtist,
-      plexDurationSec != null && Number.isFinite(Number(plexDurationSec))
-        ? Math.round(Number(plexDurationSec))
-        : null,
-      plexRatingKey,
-      row.id,
-    );
-    return row.id;
-  }
-  const info = db
-    .prepare(
-      `
-    INSERT INTO tracks (trackflow_id, artist, title, album, album_artist, year, duration_seconds, file_path, db_exists, plex_available, plex_rating_key, source, updated_at)
-    VALUES (@trackflow_id, @artist, @title, @album, @album_artist, @year, @duration_seconds, NULL, 0, 1, @plex_rating_key, 'plex', datetime('now'))
-  `,
-    )
-    .run({
-      trackflow_id: flow || null,
-      artist: String(meta.artist || '').trim() || 'Unknown',
-      title: String(meta.title || '').trim() || 'Unknown',
-      album: meta.album != null ? String(meta.album).trim() : null,
-      album_artist: albumArtist,
-      year: meta.year != null ? String(meta.year).trim() : null,
-      duration_seconds:
-        plexDurationSec != null && Number.isFinite(Number(plexDurationSec))
-          ? Math.round(Number(plexDurationSec))
-          : null,
-      plex_rating_key: plexRatingKey,
-    });
-  return Number(info.lastInsertRowid);
+  ).run(
+    String(meta.artist || '').trim(),
+    String(meta.title || '').trim(),
+    meta.album != null ? String(meta.album).trim() : null,
+    albumArtist,
+    plexDurationSec != null && Number.isFinite(Number(plexDurationSec))
+      ? Math.round(Number(plexDurationSec))
+      : null,
+    plexRatingKey,
+    row.id,
+  );
+  return row.id;
 }
 
 const recentDiscoverStmt = db.prepare(`
   SELECT trackflow_id, artist, title, album, duration_seconds
   FROM tracks
   WHERE trackflow_id IS NOT NULL AND trim(trackflow_id) != ''
-    AND (db_exists = 1 OR plex_available = 1)
+    AND db_exists = 1
   ORDER BY datetime(updated_at) DESC, id DESC
   LIMIT ?
 `);
 
-/**
- * Library rows with Deezer id, newest first (for Discover “Recently added”).
- * @param {number} [limit=20]
- * @returns {object[]} Deezer-shaped track rows (no cover/preview; enriched later)
- */
 function getRecentlyAddedTracksForDiscover(limit = 20) {
   const lim = Math.min(100, Math.max(1, Math.floor(Number(limit) || 20)));
   const rows = recentDiscoverStmt.all(lim);
@@ -586,18 +538,6 @@ function getRecentlyAddedTracksForDiscover(limit = 20) {
   });
 }
 
-function syncRequestPlexStatusFromTracks() {
-  db.exec(`
-    UPDATE requests
-    SET plex_status = 'found'
-    WHERE status = 'completed'
-      AND (plex_status IS NULL OR plex_status = 'pending')
-      AND deezer_id IN (
-        SELECT trackflow_id FROM tracks WHERE plex_available = 1 AND trackflow_id IS NOT NULL
-      )
-  `);
-}
-
 module.exports = {
   normMeta,
   metaMatch,
@@ -608,14 +548,10 @@ module.exports = {
   fileExistsInLibraryForRequestSync,
   loadTracksPresencePool,
   batchDiscoverFromDb,
-  batchPlexFlagsFromDb,
   enrichRequestRowFromTracksSync,
   upsertTrackFromLibraryScan,
   markLibraryFilesMissing,
-  clearAllPlexAvailableFlags,
-  setPlexAvailableForTrackRow,
-  insertOrUpdateTrackFromPlex,
-  syncRequestPlexStatusFromTracks,
+  applyPlexRatingKeyFromPlexMetadata,
   getRecentlyAddedTracksForDiscover,
   loadPoolStmt,
   getByFlowStmt,

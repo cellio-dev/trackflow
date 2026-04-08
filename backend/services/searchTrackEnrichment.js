@@ -1,21 +1,15 @@
 /**
- * Attach library / request / Plex display fields to Deezer-shaped track rows (search + discover).
+ * Attach library / request display fields to Deezer-shaped track rows (search + discover).
  */
 
 const { getDb } = require('../db');
 const { computeDisplayFields } = require('./requestDisplayStatus');
-const {
-  batchDiscoverFilesInLibrary,
-  getAvailabilitySettingsSync,
-  isPlexAvailabilityActive,
-  isSearchTrackConsideredInLibrary,
-} = require('./libraryAvailability');
-const { batchPlexFlagsFromDb } = require('./tracksDb');
+const { batchDiscoverFilesInLibrary, isSearchTrackConsideredInLibrary } = require('./libraryAvailability');
 
 const db = getDb();
 
 const getRequestByDeezerIdStmt = db.prepare(`
-  SELECT id, status, plex_status, processing_phase, cancelled,
+  SELECT id, status, processing_phase, cancelled,
          title, artist, album, duration_seconds
   FROM requests
   WHERE deezer_id = ?
@@ -29,27 +23,16 @@ const getRequestByDeezerIdStmt = db.prepare(`
  */
 async function enrichDeezerTrackRows(trackRows) {
   const tracks = Array.isArray(trackRows) ? trackRows : [];
-  const settings = getAvailabilitySettingsSync();
 
   const fileFlags = await batchDiscoverFilesInLibrary(tracks);
-  const plexFlags = batchPlexFlagsFromDb(tracks);
-
-  const plexCounts = isPlexAvailabilityActive(settings);
 
   return tracks.map((track, i) => {
     const existsInMusicLibrary = Boolean(fileFlags[i]);
-    const plexFromDb = Boolean(plexFlags[i]);
-    const existsInPlex = plexCounts ? plexFromDb : false;
-    const isInUserLibrary = isSearchTrackConsideredInLibrary(
-      existsInMusicLibrary,
-      plexFromDb,
-      settings,
-    );
+    const isInUserLibrary = isSearchTrackConsideredInLibrary(existsInMusicLibrary);
     const deezerId = String(track.id);
     const row = getRequestByDeezerIdStmt.get(deezerId);
     const requestStatus = row ? row.status : null;
     const requestId = row ? row.id : null;
-    const requestPlexStatus = row ? row.plex_status : null;
     const requestCancelled = row ? Number(row.cancelled) === 1 : false;
     let requestDisplayStatus = null;
     let requestProcessingStatus = null;
@@ -58,7 +41,6 @@ async function enrichDeezerTrackRows(trackRows) {
         const computed = computeDisplayFields({
           ...row,
           library_file_match: existsInMusicLibrary,
-          library_plex_available: existsInPlex,
         });
         requestDisplayStatus = computed.displayStatus || null;
         requestProcessingStatus = computed.processingStatus || null;
@@ -70,12 +52,12 @@ async function enrichDeezerTrackRows(trackRows) {
     return {
       ...track,
       existsInMusicLibrary,
-      existsInPlex,
+      existsInPlex: false,
       isInUserLibrary,
       requestStatus,
       requestCancelled,
       requestId,
-      requestPlexStatus,
+      requestPlexStatus: null,
       requestDisplayStatus,
       requestProcessingStatus,
     };

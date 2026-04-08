@@ -4,7 +4,14 @@ const path = require('path');
 const SCRIPT = path.join(__dirname, '..', 'scripts', 'trackflow_mutagen.py');
 
 function pythonCmd() {
-  return "C:\\Python314\\python.exe";
+  const fromEnv = process.env.TRACKFLOW_PYTHON || process.env.PYTHON;
+  if (fromEnv != null && String(fromEnv).trim() !== '') {
+    return String(fromEnv).trim();
+  }
+  if (process.platform === 'win32') {
+    return 'C:\\Python314\\python.exe';
+  }
+  return 'python3';
 }
 
 /**

@@ -7,7 +7,6 @@ import './track-status-shared.js';
 (function (global) {
   let availabilitySettings = {
     plex_integration_enabled: false,
-    require_plex_for_available: false,
   };
 
   function configureSettings(s) {
@@ -16,7 +15,6 @@ import './track-status-shared.js';
     }
     availabilitySettings = {
       plex_integration_enabled: Boolean(s.plex_integration_enabled),
-      require_plex_for_available: Boolean(s.require_plex_for_available),
     };
   }
 

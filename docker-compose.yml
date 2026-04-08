@@ -1,0 +1,28 @@
+# TrackFlow — Compose reads `.env` in this folder for variable substitution.
+# Copy `docker.env.example` to `.env`, set SESSION_SECRET, then:
+#   docker compose up -d --build
+#
+# Layout (defaults match a typical split: fast disk for appdata, bulk storage for media):
+#   /appdata     — SQLite + anything else the app persists (host: TRACKFLOW_APPDATA_HOST_PATH)
+#   /media       — whole media tree (host: TRACKFLOW_MEDIA_HOST_PATH); set library + slskd paths in Settings, or via LIBRARY_PATH / SLSKD_LOCAL_DOWNLOAD_PATH below (seed empty DB only).
+
+services:
+  trackflow:
+    build: .
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${TRACKFLOW_PORT:-3000}:3000"
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET in .env (see docker.env.example)}
+      TRUST_PROXY: ${TRUST_PROXY:-1}
+      TRACKFLOW_PYTHON: python3
+      TRACKFLOW_SQLITE_PATH: /appdata/trackflow.sqlite
+      # Seed settings when columns are still empty (first run). Change anytime in Settings UI.
+      LIBRARY_PATH: ${LIBRARY_PATH:-/media/Music/Tracks}
+      SLSKD_LOCAL_DOWNLOAD_PATH: ${SLSKD_LOCAL_DOWNLOAD_PATH:-/media/Downloads/slskd/complete}
+    volumes:
+      - ${TRACKFLOW_APPDATA_HOST_PATH:-/fast/docker/appdata/trackflow}:/appdata
+      - ${TRACKFLOW_MEDIA_HOST_PATH:-/data/media}:/media

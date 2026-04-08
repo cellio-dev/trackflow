@@ -36,7 +36,7 @@ const JOB_EMAIL_LABELS = {
   [JOB_KEYS.orphan_cleanup]: 'Completed download folder cleanup',
   [JOB_KEYS.completed_request_clear]: 'Clear completed request history',
   [JOB_KEYS.status_email]: 'Send status email (digest)',
-  [JOB_KEYS.plex_sync]: 'Plex Sync (scan library + sync playlists)',
+  [JOB_KEYS.plex_sync]: 'Plex Sync (rating keys + playlists)',
 };
 
 const JOB_EMAIL_ORDER = [
