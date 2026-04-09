@@ -53,17 +53,30 @@ async function runPlexPlaylistSyncCore() {
     } catch (e) {
       failed += 1;
       const msg = e?.message || String(e);
-      errors.push({ followed_id: row.id, error: msg });
-      console.error('[plexPlaylistSyncJob]', row.id, msg);
+      const title = String(row?.title || '').trim() || '(untitled)';
+      const playlistId = row?.playlist_id != null ? String(row.playlist_id) : '';
+      errors.push({
+        followed_id: row.id,
+        playlist_id: playlistId,
+        title,
+        error: msg,
+      });
+      console.error(
+        `[plexPlaylistSyncJob] playlist sync failed follow_id=${row.id} deezer_playlist=${playlistId} title=${JSON.stringify(title)}: ${msg}`,
+      );
+      if (e?.stack) {
+        console.error(e.stack);
+      }
     }
   }
 
+  const stepOk = failed === 0;
   return {
-    ok: true,
+    ok: stepOk,
     targets: rows.length,
     synced: ok,
     failed,
-    errors: errors.slice(0, 8),
+    errors: errors.slice(0, 16),
   };
 }
 

@@ -558,6 +558,28 @@ function tryReadTrackflowIdFromPlexMediaFile(item, libraryRoot) {
  * Paginated type=10 (track) listing for the configured music section.
  * @returns {Promise<object[]>} Plex Metadata track items
  */
+/** Larger pages + retries reduce wall time for very large music libraries. */
+async function fetchJsonWithRetry(url, plexToken, contextLabel, maxAttempts = 4) {
+  let lastErr;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await fetchJson(url, plexToken);
+    } catch (e) {
+      lastErr = e;
+      if (attempt >= maxAttempts) {
+        break;
+      }
+      const delayMs = Math.min(8000, 400 * 2 ** (attempt - 1));
+      console.warn(
+        `[plex] ${contextLabel} attempt ${attempt}/${maxAttempts} failed, retry in ${delayMs}ms:`,
+        e?.message || e,
+      );
+      await new Promise((r) => setTimeout(r, delayMs));
+    }
+  }
+  throw lastErr;
+}
+
 async function fetchAllTracksInMusicSection() {
   const { plexUrl, plexToken } = runtimeConfig.getPlexUrlAndToken();
   if (!plexUrl || !plexToken) {
@@ -565,13 +587,16 @@ async function fetchAllTracksInMusicSection() {
   }
   const base = plexUrl.replace(/\/+$/, '');
   const sectionId = encodeURIComponent(String(getPlexMusicSectionId() || '').trim());
-  const pageSize = 200;
+  const rawSize = Number(runtimeConfig.getPlexTrackScanSize());
+  const pageSize = Number.isFinite(rawSize) ? Math.min(500, Math.max(100, Math.floor(rawSize))) : 200;
   let start = 0;
   const all = [];
   let total = Infinity;
+  let pageIdx = 0;
   while (start < total) {
     const url = `${base}/library/sections/${sectionId}/all?type=10&X-Plex-Container-Start=${start}&X-Plex-Container-Size=${pageSize}`;
-    const data = await fetchJson(url, plexToken);
+    const label = `library section tracks page ${pageIdx} (start=${start}, size=${pageSize})`;
+    const data = await fetchJsonWithRetry(url, plexToken, label);
     const meta = Array.isArray(data?.MediaContainer?.Metadata) ? data.MediaContainer.Metadata : [];
     total = Number(data?.MediaContainer?.totalSize);
     if (!Number.isFinite(total)) {
@@ -582,10 +607,19 @@ async function fetchAllTracksInMusicSection() {
         all.push(m);
       }
     }
+    if (pageIdx === 0 || pageIdx % 5 === 0 || meta.length < pageSize) {
+      console.log(
+        `[plex] fetchAllTracksInMusicSection ${label}: +${meta.length} tracks (total so far ${all.length}/${Number.isFinite(total) ? total : '?'})`,
+      );
+    }
     if (meta.length < pageSize) {
       break;
     }
     start += pageSize;
+    pageIdx += 1;
+    if (pageIdx % 10 === 0) {
+      await new Promise((r) => setImmediate(r));
+    }
   }
   return all;
 }

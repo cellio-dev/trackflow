@@ -30,6 +30,9 @@ function bulkLibraryItemUri(machineId, ratingKeys) {
   return `server://${machineId}/com.plexapp.plugins.library/library/metadata/${keys.join(',')}`;
 }
 
+/** Limits URI length; full bulk in one request often fails for huge playlists. */
+const RATING_KEYS_BULK_CHUNK = 120;
+
 async function fetchMachineIdentifier(baseUrl, token) {
   const url = `${baseUrl}/identity`;
   const res = await fetch(url, {
@@ -199,20 +202,47 @@ async function syncFollowedPlaylistToPlex(fpRow, userPlexToken) {
     };
   }
 
-  const bulkUri = bulkLibraryItemUri(machineId, ratingKeys);
   let newRk;
   try {
+    const bulkUri = bulkLibraryItemUri(machineId, ratingKeys);
     newRk = await postPlaylistCreate(base, token, playlistTitle, bulkUri);
-  } catch (e) {
+  } catch (e0) {
     if (ratingKeys.length <= 1) {
-      throw e;
+      throw e0;
     }
-    const [firstKey, ...restKeys] = ratingKeys;
-    const firstUri = bulkLibraryItemUri(machineId, [firstKey]);
-    newRk = await postPlaylistCreate(base, token, playlistTitle, firstUri);
-    for (const k of restKeys) {
-      const oneUri = bulkLibraryItemUri(machineId, [k]);
-      await putPlaylistAddItem(base, token, newRk, oneUri);
+    try {
+      const firstChunk = ratingKeys.slice(0, RATING_KEYS_BULK_CHUNK);
+      const rest = ratingKeys.slice(RATING_KEYS_BULK_CHUNK);
+      newRk = await postPlaylistCreate(
+        base,
+        token,
+        playlistTitle,
+        bulkLibraryItemUri(machineId, firstChunk),
+      );
+      for (let i = 0, chunk = 0; i < rest.length; i += RATING_KEYS_BULK_CHUNK, chunk += 1) {
+        const slice = rest.slice(i, i + RATING_KEYS_BULK_CHUNK);
+        await putPlaylistAddItem(base, token, newRk, bulkLibraryItemUri(machineId, slice));
+        if (chunk > 0 && chunk % 10 === 0) {
+          await new Promise((r) => setImmediate(r));
+        }
+      }
+      console.warn(
+        `[plexPlaylistSync] playlist "${playlistTitle}" used chunked bulk (${ratingKeys.length} keys in chunks of ${RATING_KEYS_BULK_CHUNK}) after single-request create failed: ${e0?.message || e0}`,
+      );
+    } catch (e1) {
+      console.warn(
+        `[plexPlaylistSync] playlist "${playlistTitle}" chunked bulk failed (${e1?.message || e1}); falling back to one track per request`,
+      );
+      const [firstKey, ...restKeys] = ratingKeys;
+      const firstUri = bulkLibraryItemUri(machineId, [firstKey]);
+      newRk = await postPlaylistCreate(base, token, playlistTitle, firstUri);
+      for (let k = 0; k < restKeys.length; k += 1) {
+        const oneUri = bulkLibraryItemUri(machineId, [restKeys[k]]);
+        await putPlaylistAddItem(base, token, newRk, oneUri);
+        if (k > 0 && k % 100 === 0) {
+          await new Promise((r) => setImmediate(r));
+        }
+      }
     }
   }
 

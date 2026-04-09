@@ -1333,7 +1333,7 @@ router.post('/trigger-plex-sync', async (req, res) => {
     const result = await runPlexSyncWithTelemetry();
     return res.json(result);
   } catch (error) {
-    console.error('trigger-plex-sync failed:', error.message);
+    console.error('trigger-plex-sync failed:', error.message, error.stack || '');
     return res.status(500).json({ error: error.message || 'Plex Sync failed' });
   }
 });
@@ -1344,7 +1344,7 @@ router.post('/trigger-plex-scan', async (req, res) => {
     const result = await runPlexSyncWithTelemetry();
     return res.json(result);
   } catch (error) {
-    console.error('trigger-plex-scan failed:', error.message);
+    console.error('trigger-plex-scan failed:', error.message, error.stack || '');
     return res.status(500).json({ error: error.message || 'Plex Sync failed' });
   }
 });
@@ -1355,7 +1355,7 @@ router.post('/trigger-plex-playlist-sync', async (req, res) => {
     const result = await runPlexSyncWithTelemetry();
     return res.json(result);
   } catch (error) {
-    console.error('trigger-plex-playlist-sync failed:', error.message);
+    console.error('trigger-plex-playlist-sync failed:', error.message, error.stack || '');
     return res.status(500).json({ error: error.message || 'Plex Sync failed' });
   }
 });

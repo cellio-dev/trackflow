@@ -195,7 +195,7 @@ const server = app.listen(PORT, () => {
     if (plexSyncJobOn && plexOn && now - lastPlexSyncAt >= plexMin * 60_000) {
       lastPlexSyncAt = now;
       void withJobTelemetry(JOB_KEYS.plex_sync, () => runPlexSyncJob()).catch((err) =>
-        console.error('plexSyncJob failed:', err?.message || err),
+        console.error('plexSyncJob failed:', err?.message || err, err?.stack || ''),
       );
     }
 

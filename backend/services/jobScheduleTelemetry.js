@@ -12,6 +12,9 @@ const { parseIntervalMs, isEnabled: isOrphanCleanupEnabled } = require('../jobs/
 
 const db = getDb();
 
+/** SQLite TEXT is fine with long strings; keep UI/API payloads bounded. */
+const MAX_JOB_LAST_ERROR_LENGTH = 2000;
+
 const JOB_KEYS = Object.freeze({
   discover_cache: 'discover_cache',
   library_scan: 'library_scan',
@@ -49,12 +52,23 @@ function markJobStart(jobKey) {
   upsertStartStmt.run({ job_key: jobKey, last_started_at: nowIso() });
 }
 
+function truncateJobErrorMessage(msg) {
+  const s = msg != null ? String(msg).trim() : '';
+  if (!s) {
+    return null;
+  }
+  if (s.length <= MAX_JOB_LAST_ERROR_LENGTH) {
+    return s;
+  }
+  return `${s.slice(0, MAX_JOB_LAST_ERROR_LENGTH - 20)}… [truncated]`;
+}
+
 function markJobEnd(jobKey, ok, errorMessage) {
   updateEndStmt.run({
     job_key: jobKey,
     last_finished_at: nowIso(),
     last_result: ok ? 'success' : 'failure',
-    last_error: errorMessage != null && String(errorMessage).trim() ? String(errorMessage).trim() : null,
+    last_error: truncateJobErrorMessage(errorMessage),
   });
 }
 
@@ -290,8 +304,10 @@ function buildJobScheduleStatusPayload(settingsRow) {
 
 module.exports = {
   JOB_KEYS,
+  MAX_JOB_LAST_ERROR_LENGTH,
   markJobStart,
   markJobEnd,
+  truncateJobErrorMessage,
   withJobTelemetry,
   withJobTelemetrySync,
   buildJobScheduleStatusPayload,
