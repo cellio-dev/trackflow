@@ -35,20 +35,24 @@ const storage = multer.diskStorage({
   },
 });
 
-const upload = multer({
-  storage,
-  limits: { fileSize: maxUploadBytes() },
-  fileFilter(_req, file, cb) {
-    const name = file.originalname || '';
-    if (audioExtRe.test(path.extname(name))) {
-      return cb(null, true);
-    }
-    cb(new Error('Unsupported file type. Use a common audio format (mp3, flac, m4a, etc.).'));
-  },
-});
+function createUploadMiddleware() {
+  return multer({
+    storage,
+    // Resolve from settings/env at request time (not process startup),
+    // so raising max file size applies immediately.
+    limits: { fileSize: maxUploadBytes() },
+    fileFilter(_req, file, cb) {
+      const name = file.originalname || '';
+      if (audioExtRe.test(path.extname(name))) {
+        return cb(null, true);
+      }
+      cb(new Error('Unsupported file type. Use a common audio format (mp3, flac, m4a, etc.).'));
+    },
+  });
+}
 
 router.post('/manual-import/analyze', (req, res, next) => {
-  upload.single('file')(req, res, (err) => {
+  createUploadMiddleware().single('file')(req, res, (err) => {
     if (err) {
       if (err instanceof multer.MulterError) {
         if (err.code === 'LIMIT_FILE_SIZE') {

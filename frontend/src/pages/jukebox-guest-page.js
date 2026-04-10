@@ -6,11 +6,21 @@ import {
   jukeboxSearchRowStatusIconHtml,
   jukeboxSearchTrackBlockedFromQueue,
 } from '../js/jukebox-search-queue-shared.js';
-import * as JbCast from '../js/jukebox-cast.js';
 import {
   installJukeboxGuestBackGuard,
   releaseJukeboxGuestBackGuard,
 } from '../js/jukebox-guest-back-guard.js';
+
+function isIOSDevice() {
+  const ua = navigator.userAgent || '';
+  if (/iPhone|iPad|iPod/i.test(ua)) {
+    return true;
+  }
+  if (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) {
+    return true;
+  }
+  return false;
+}
 
 const RETURN_AFTER_JUKEBOX_KEY = 'tf-jukebox-return-href';
 
@@ -142,8 +152,6 @@ const globalErr = document.getElementById('globalErr');
 const jbToast = document.getElementById('jbToast');
 const menuBtn = document.getElementById('menuBtn');
 const menuPanel = document.getElementById('menuPanel');
-const castMainBtn = document.getElementById('castMainBtn');
-const npCastLine = document.getElementById('npCastLine');
 
 let ignoringMediaEvents = false;
 /** @type {ReturnType<typeof setTimeout> | null} */
@@ -184,14 +192,11 @@ let lastQueueDisplaySig = '';
 const discoveryStripSigs = { topTracks: '', freshTracks: '', recentMix: '' };
 let lastHistoryDisplaySig = '';
 let discoveryInteractUntil = 0;
-/** Last queue row id successfully loaded on the Cast receiver (null when using local audio). */
-let lastCastLoadedQueueItemId = null;
-let castLoadSeq = 0;
 /** Synced with server `host_seek_nonce` so we only apply each host seek once. */
 let lastAppliedHostSeekNonce = 0;
-let lastCastReportCur = 0;
-let lastCastReportDur = 0;
 let lastReportPlaybackAt = 0;
+/** While guest POST /pause is in flight after a play/pause tap; stale polls must not undo local playback. */
+let guestPlaybackIntent = null;
 
 function markDiscoveryInteract() {
   discoveryInteractUntil = Date.now() + 15000;
@@ -225,7 +230,7 @@ async function postReportPlayback(positionSeconds, durationSeconds) {
 }
 
 function scheduleReportPlaybackFromLocalAudio() {
-  if (!guestHasPlayableCurrent || guestCastingPlayback() || !audioEl) {
+  if (!guestHasPlayableCurrent || !audioEl) {
     return;
   }
   const now = Date.now();
@@ -245,22 +250,6 @@ function scheduleReportPlaybackFromLocalAudio() {
   void postReportPlayback(cur, dur);
 }
 
-function scheduleReportPlaybackFromCast() {
-  if (!guestHasPlayableCurrent || !guestCastingPlayback()) {
-    return;
-  }
-  const qid = queueItemIdForReport();
-  if (!qid || !Number.isFinite(lastCastReportDur) || lastCastReportDur <= 0) {
-    return;
-  }
-  const now = Date.now();
-  if (now - lastReportPlaybackAt < REPORT_PLAYBACK_MIN_MS) {
-    return;
-  }
-  lastReportPlaybackAt = now;
-  void postReportPlayback(lastCastReportCur, lastCastReportDur);
-}
-
 function applyHostSeekFromJukeboxState(data) {
   if (!data?.jukebox || !guestHasPlayableCurrent || !data.current?.id) {
     return;
@@ -277,14 +266,6 @@ function applyHostSeekFromJukeboxState(data) {
   const t = Number(posRaw);
   if (!Number.isFinite(t) || t < 0) {
     lastAppliedHostSeekNonce = n;
-    return;
-  }
-  if (guestCastingPlayback()) {
-    if (lastCastLoadedQueueItemId !== data.current.id) {
-      return;
-    }
-    lastAppliedHostSeekNonce = n;
-    JbCast.castSeekTo(t);
     return;
   }
   if (!audioEl) {
@@ -390,6 +371,24 @@ async function syncGuestPauseToServer(isPaused) {
   await syncGuestPlaybackToServer({ is_paused: isPaused });
 }
 
+/**
+ * Only sync play/pause to the server when this tab is actually driving playback via `<audio>`.
+ */
+function shouldSyncLocalAudioPauseToServer() {
+  if (!audioEl) {
+    return false;
+  }
+  try {
+    const src = audioEl.currentSrc || audioEl.src || '';
+    if (!src || src === window.location.href) {
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 if (audioEl) {
   try {
     audioEl.disableRemotePlayback = true;
@@ -401,6 +400,9 @@ if (audioEl) {
     if (ignoringMediaEvents || audioEl.ended) {
       return;
     }
+    if (!shouldSyncLocalAudioPauseToServer()) {
+      return;
+    }
     void syncGuestPauseToServer(true);
   });
   audioEl.addEventListener('play', () => {
@@ -408,12 +410,12 @@ if (audioEl) {
     if (ignoringMediaEvents) {
       return;
     }
+    if (!shouldSyncLocalAudioPauseToServer()) {
+      return;
+    }
     void syncGuestPauseToServer(false);
   });
   audioEl.addEventListener('timeupdate', () => {
-    if (guestCastingPlayback()) {
-      return;
-    }
     if (!audioEl.duration || !Number.isFinite(audioEl.duration)) {
       return;
     }
@@ -534,17 +536,21 @@ npPlayBtn?.addEventListener('click', () => {
       });
     return;
   }
-  if (guestCastingPlayback()) {
-    JbCast.castPlayPauseToggle();
-    return;
-  }
   if (audioEl.paused) {
+    guestPlaybackIntent = 'play';
     withIgnoreMediaEvents(() => {
       void audioEl.play().catch(() => {});
     });
+    void syncGuestPauseToServer(false).finally(() => {
+      guestPlaybackIntent = null;
+    });
   } else {
+    guestPlaybackIntent = 'pause';
     withIgnoreMediaEvents(() => {
       audioEl.pause();
+    });
+    void syncGuestPauseToServer(true).finally(() => {
+      guestPlaybackIntent = null;
     });
   }
 });
@@ -556,9 +562,7 @@ volSlider?.addEventListener('input', () => {
     return;
   }
   const v = Number(volSlider.value) / 100;
-  if (guestCastingPlayback()) {
-    JbCast.castSetReceiverVolume(v);
-  } else if (audioEl) {
+  if (audioEl) {
     audioEl.volume = v;
   }
   setVolumeButtonIcon(v);
@@ -577,39 +581,6 @@ menuBtn?.addEventListener('click', (e) => {
   e.stopPropagation();
   toggleMenu();
 });
-
-/** Avoid opening the Cast picker twice from the same mouse gesture (pointerdown then click). */
-let __tfCastOpenAt = 0;
-function openCastPickerFromGesture(e) {
-  e.stopImmediatePropagation();
-  e.stopPropagation();
-  if (!JbCast.isCastFrameworkReady()) {
-    return;
-  }
-  const now = Date.now();
-  if (now - __tfCastOpenAt < 500) {
-    return;
-  }
-  __tfCastOpenAt = now;
-  JbCast.requestCastSessionFromUserGesture();
-}
-
-/**
- * Top-bar Cast: pointerdown + capture preserves user activation for Cast APIs; click handles keyboard.
- */
-castMainBtn?.addEventListener(
-  'pointerdown',
-  (e) => {
-    if (e.pointerType === 'mouse' && e.button !== 0) {
-      return;
-    }
-    openCastPickerFromGesture(e);
-  },
-  true,
-);
-castMainBtn?.addEventListener('click', (e) => {
-  openCastPickerFromGesture(e);
-}, true);
 
 document.addEventListener('click', () => {
   closeVolPanel();
@@ -902,72 +873,11 @@ function applyHistoryFromState(hList) {
   (hList || []).forEach((h) => renderHistoryRow(historyPreview, h));
 }
 
-function guestCastingPlayback() {
-  return JbCast.isCastFrameworkReady() && JbCast.isCasting();
-}
-
-function updateJukeboxCastChrome() {
-  if (npCastLine) {
-    if (guestCastingPlayback()) {
-      const name = JbCast.getCastReceiverLabel() || 'Chromecast';
-      npCastLine.textContent = `Casting to ${name}`;
-      npCastLine.hidden = false;
-    } else {
-      npCastLine.hidden = true;
-    }
-  }
-  if (!castMainBtn) {
-    return;
-  }
-  if (!JbCast.shouldOfferCastUi() || !JbCast.isCastFrameworkReady()) {
-    castMainBtn.hidden = true;
-    return;
-  }
-  castMainBtn.hidden = false;
-  const connected = JbCast.isCasting();
-  castMainBtn.classList.toggle('is-connected', connected);
-  const dev = JbCast.getCastReceiverLabel();
-  castMainBtn.setAttribute('aria-pressed', connected ? 'true' : 'false');
-  castMainBtn.setAttribute(
-    'aria-label',
-    connected ? `Chromecast connected${dev ? ` to ${dev}` : ''}. Press to change or stop.` : 'Chromecast — pick a device',
-  );
-  castMainBtn.title = connected ? (dev ? `Casting to ${dev}` : 'Chromecast') : 'Chromecast';
-}
-
 function updateVolumeSliderState() {
   if (!volSlider) {
     return;
   }
-  const ios = JbCast.isIOSDevice();
-  const castUi = JbCast.shouldOfferCastUi() && JbCast.isCastFrameworkReady();
-  const noCastSession = !guestCastingPlayback();
-  volSlider.disabled = ios || (castUi && noCastSession);
-}
-
-function applyCastProgress(cur, dur) {
-  if (!guestCastingPlayback() || !Number.isFinite(dur) || dur <= 0) {
-    return;
-  }
-  if (Number.isFinite(cur)) {
-    lastCastReportCur = cur;
-  }
-  lastCastReportDur = dur;
-  const pct = Math.round((cur / dur) * 1000);
-  const clamped = Math.min(1000, Math.max(0, pct));
-  if (npProgressFill) {
-    npProgressFill.style.width = `${clamped / 10}%`;
-  }
-  if (npProgressRail) {
-    npProgressRail.setAttribute('aria-valuenow', String(clamped));
-  }
-  if (npTimeCur) {
-    npTimeCur.textContent = formatTime(cur);
-  }
-  if (npTimeDur) {
-    npTimeDur.textContent = formatTime(dur);
-  }
-  scheduleReportPlaybackFromCast();
+  volSlider.disabled = isIOSDevice();
 }
 
 function playableLibraryTrackId(cur) {
@@ -987,7 +897,6 @@ function playableLibraryTrackId(cur) {
 function applyPlaybackState(data) {
   globalErr.hidden = true;
   guestHasPlayableCurrent = playableLibraryTrackId(data?.current);
-  const useCast = guestCastingPlayback();
 
   if (playableLibraryTrackId(data?.current)) {
     const t = data.current;
@@ -998,12 +907,17 @@ function applyPlaybackState(data) {
     updateNowPlayingArt(t);
 
     const relStream = `/api/jukeboxes/stream/${t.library_track_id}?jukebox_id=${encodeURIComponent(jukeboxId)}&token=${encodeURIComponent(guestToken)}&mode=guest`;
-    const absStream = new URL(relStream, window.location.origin).href;
     let trackJustChanged = false;
     const serverPaused = Boolean(data.jukebox?.is_paused);
-    const serverBecamePlaying = lastServerPaused === true && !serverPaused;
+    let effectivePaused = serverPaused;
+    if (guestPlaybackIntent === 'play' && serverPaused) {
+      effectivePaused = false;
+    } else if (guestPlaybackIntent === 'pause' && !serverPaused) {
+      effectivePaused = true;
+    }
+    const serverBecamePlaying = lastServerPaused === true && !effectivePaused;
     const firstPlaybackState = lastServerPaused === null;
-    lastServerPaused = serverPaused;
+    lastServerPaused = effectivePaused;
     const vol = data.jukebox?.volume ?? 1;
     if (volSlider) {
       const vStr = String(Math.round(vol * 100));
@@ -1013,76 +927,31 @@ function applyPlaybackState(data) {
     }
     setVolumeButtonIcon(vol);
 
-    if (useCast) {
+    if (audioEl) {
       withIgnoreMediaEvents(() => {
-        if (audioEl) {
+        if (lastQueueItemId !== data.current.id) {
+          trackJustChanged = true;
+          lastQueueItemId = data.current.id;
+          audioEl.src = relStream;
+        }
+        if (effectivePaused) {
           audioEl.pause();
-          audioEl.removeAttribute('src');
+        } else if (serverBecamePlaying || firstPlaybackState || !audioEl.paused || trackJustChanged) {
+          void audioEl.play().catch(() => {});
         }
       });
-      JbCast.castSetReceiverVolume(vol);
-      if (lastQueueItemId !== data.current.id) {
-        lastQueueItemId = data.current.id;
-      }
+      audioEl.volume = vol;
       currentPlayingQueueItemId = data.current.id;
-      const needMediaLoad = lastCastLoadedQueueItemId !== t.id;
-      const seekSnap = data;
-      const seq = ++castLoadSeq;
-      void (async () => {
-        if (seq !== castLoadSeq) {
-          return;
-        }
-        if (!guestCastingPlayback()) {
-          return;
-        }
-        if (needMediaLoad) {
-          const ok = await JbCast.loadStreamOnCast({
-            streamUrl: absStream,
-            title: t.title || 'Track',
-            artist: typeof t.artist === 'string' ? t.artist : '',
-            autoplay: !serverPaused,
-          });
-          if (seq !== castLoadSeq || !guestCastingPlayback()) {
-            return;
-          }
-          if (ok) {
-            lastCastLoadedQueueItemId = t.id;
-          }
-        } else {
-          JbCast.castSetPaused(serverPaused);
-        }
-        applyHostSeekFromJukeboxState(seekSnap);
-        setPlayIcon(serverPaused);
-      })();
+      setPlayIcon(audioEl.paused);
     } else {
-      lastCastLoadedQueueItemId = null;
-      if (audioEl) {
-        withIgnoreMediaEvents(() => {
-          if (lastQueueItemId !== data.current.id) {
-            trackJustChanged = true;
-            lastQueueItemId = data.current.id;
-            audioEl.src = relStream;
-          }
-          if (serverPaused) {
-            audioEl.pause();
-          } else if (serverBecamePlaying || firstPlaybackState || !audioEl.paused || trackJustChanged) {
-            void audioEl.play().catch(() => {});
-          }
-        });
-        audioEl.volume = vol;
-        currentPlayingQueueItemId = data.current.id;
-        setPlayIcon(audioEl.paused);
-      } else {
-        currentPlayingQueueItemId = data.current.id;
-        setPlayIcon(true);
-      }
-      applyHostSeekFromJukeboxState(data);
+      currentPlayingQueueItemId = data.current.id;
+      setPlayIcon(true);
     }
+    applyHostSeekFromJukeboxState(data);
   } else {
     lastQueueItemId = null;
     currentPlayingQueueItemId = null;
     lastServerPaused = null;
-    lastCastLoadedQueueItemId = null;
     const wasPlaying = lastCurrentQueueRowId !== null;
     lastCurrentQueueRowId = null;
     if (wasPlaying) {
@@ -1090,9 +959,6 @@ function applyPlaybackState(data) {
     }
     updateNowPlayingMeta(null);
     updateNowPlayingArt(null);
-    if (useCast) {
-      JbCast.castStopMediaIfAny();
-    }
     withIgnoreMediaEvents(() => {
       if (audioEl) {
         audioEl.pause();
@@ -1122,10 +988,6 @@ function applyPlaybackState(data) {
   applyQueueFromState(data.queue);
   applyHistoryFromState(data.play_history);
   updateVolumeSliderState();
-  updateJukeboxCastChrome();
-  if (playableLibraryTrackId(data?.current) && guestCastingPlayback()) {
-    applyHostSeekFromJukeboxState(data);
-  }
 }
 
 function attachGuestTrackEndedHandler() {
@@ -1680,46 +1542,7 @@ for (const el of [queuePreview, historyPreview, topTracksList, freshTracksList, 
   el?.addEventListener('scroll', markDiscoveryInteract, { passive: true });
 }
 
-JbCast.setJukeboxCastCallbacks({
-  onSessionUiUpdate: () => {
-    updateJukeboxCastChrome();
-    void refreshPlaybackOnly();
-  },
-  onCastProgress: (cur, dur) => {
-    applyCastProgress(cur, dur);
-  },
-  onCastPausedSync: (paused) => {
-    setPlayIcon(paused);
-    void syncGuestPauseToServer(paused);
-  },
-  onCastTrackFinished: async () => {
-    const qid = currentPlayingQueueItemId;
-    if (qid) {
-      await fetch(`${base}/advance?${qs()}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
-        body: JSON.stringify({ queue_item_id: Number(qid) }),
-      });
-      void refreshPlaybackOnly();
-    }
-  },
-  onCastFallbackLocal: () => {
-    lastCastLoadedQueueItemId = null;
-    castLoadSeq += 1;
-    void refreshPlaybackOnly();
-  },
-});
-
-if (JbCast.shouldOfferCastUi()) {
-  void JbCast.loadCastSenderScript().then(() => {
-    updateJukeboxCastChrome();
-    updateVolumeSliderState();
-  });
-} else {
-  updateJukeboxCastChrome();
-  updateVolumeSliderState();
-}
+updateVolumeSliderState();
 
 setInterval(() => void refreshPlaybackOnly(), 2800);
 setInterval(() => void maybeSilentlyRefreshDiscovery(), 120000);

@@ -19,6 +19,7 @@ const autoApprove = document.getElementById('autoApprove');
 const followRequestsAutoApprove = document.getElementById('followRequestsAutoApprove');
 const jukeboxRequestsAutoApprove = document.getElementById('jukeboxRequestsAutoApprove');
 const completedRequestAutoClearDays = document.getElementById('completedRequestAutoClearDays');
+const failedRequestAutoRetryDays = document.getElementById('failedRequestAutoRetryDays');
 const preferredFormat = document.getElementById('preferredFormat');
 const maxConcurrentDownloads = document.getElementById('maxConcurrentDownloads');
 const maxDownloadAttempts = document.getElementById('maxDownloadAttempts');
@@ -345,6 +346,14 @@ async function loadSettings() {
           ? String(Math.floor(Number(c)))
           : '0';
       completedRequestAutoClearDays.dataset.lastValue = completedRequestAutoClearDays.value;
+    }
+    if (failedRequestAutoRetryDays) {
+      const v = data.failed_request_auto_retry_days;
+      failedRequestAutoRetryDays.value =
+        v != null && Number.isFinite(Number(v)) && Number(v) >= 0
+          ? String(Math.floor(Number(v)))
+          : '0';
+      failedRequestAutoRetryDays.dataset.lastValue = failedRequestAutoRetryDays.value;
     }
 
     if (jobDiscoverCacheEnabled) {
@@ -1022,6 +1031,27 @@ if (completedRequestAutoClearDays) {
   });
 }
 
+if (failedRequestAutoRetryDays) {
+  failedRequestAutoRetryDays.addEventListener('change', async () => {
+    const n = parseInt(failedRequestAutoRetryDays.value, 10);
+    const prev = failedRequestAutoRetryDays.dataset.lastValue || '0';
+    if (!Number.isFinite(n) || n < 0 || n > 3650) {
+      failedRequestAutoRetryDays.value = prev;
+      settingsGlobalMessage.hidden = false;
+      settingsGlobalMessage.textContent = 'Value must be 0–3650.';
+      return;
+    }
+    try {
+      await postSettingsField({ failed_request_auto_retry_days: Math.floor(n) });
+      failedRequestAutoRetryDays.dataset.lastValue = String(Math.floor(n));
+    } catch (e) {
+      failedRequestAutoRetryDays.value = prev;
+      settingsGlobalMessage.hidden = false;
+      settingsGlobalMessage.textContent = e.message || 'Could not save.';
+    }
+  });
+}
+
 if (plexPlayHistoryRecommendations) {
   plexPlayHistoryRecommendations.addEventListener('change', async () => {
     const v = plexPlayHistoryRecommendations.checked;
@@ -1327,11 +1357,25 @@ document.querySelectorAll('.job-run-btn').forEach((btn) => {
     }
     if (settingsGlobalMessage) {
       settingsGlobalMessage.hidden = true;
+      settingsGlobalMessage.classList.remove('is-info');
     }
     btn.disabled = true;
     try {
       const res = await fetch(url, { method: 'POST', credentials: 'same-origin' });
       const data = await res.json().catch(() => ({}));
+      const isPlexManualSync =
+        url.includes('plex-sync') || url.includes('plex-scan') || url.includes('plex-playlist-sync');
+      if (res.ok && isPlexManualSync && (res.status === 202 || data.started)) {
+        if (settingsGlobalMessage) {
+          settingsGlobalMessage.hidden = false;
+          settingsGlobalMessage.classList.add('is-info');
+          settingsGlobalMessage.textContent =
+            data.message ||
+            'Plex sync started in the background. Check job status when it completes.';
+        }
+        await loadSettings();
+        return;
+      }
       if (!res.ok) {
         throw new Error(data.error || 'Failed');
       }
@@ -1339,6 +1383,7 @@ document.querySelectorAll('.job-run-btn').forEach((btn) => {
     } catch (e) {
       if (settingsGlobalMessage) {
         settingsGlobalMessage.hidden = false;
+        settingsGlobalMessage.classList.remove('is-info');
         settingsGlobalMessage.textContent = e.message || 'Job failed.';
       }
     } finally {

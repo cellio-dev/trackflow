@@ -21,6 +21,30 @@ function pythonEnv() {
   return { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' };
 }
 
+function parseLastJsonLine(stdout) {
+  const raw = String(stdout || '').trim();
+  if (!raw) {
+    return null;
+  }
+  const lines = raw.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    const line = lines[i];
+    if (!line.startsWith('{')) {
+      continue;
+    }
+    try {
+      return JSON.parse(line);
+    } catch {
+      /* continue */
+    }
+  }
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
 function readTagsForFileSync(filePath) {
   try {
     const r = spawnSync(pythonCmd(), [SCRIPT, 'read', filePath], {
@@ -29,16 +53,43 @@ function readTagsForFileSync(filePath) {
       windowsHide: true,
       env: pythonEnv(),
     });
-    if (r.error || r.status !== 0) {
-      const stderr = String(r.stderr || '').trim();
+    const parsed = parseLastJsonLine(r.stdout);
+    const stderr = String(r.stderr || '').trim();
+
+    if (r.error) {
       if (stderr) {
-        console.error('[mutagen] readTagsForFileSync: stderr', filePath, stderr);
+        console.error('[mutagen] readTagsForFileSync: stderr', filePath, stderr.slice(0, 800));
       }
-      return null;
+      console.error('[mutagen] readTagsForFileSync: spawn error', filePath, r.error.message || r.error);
+      return (
+        parsed || {
+          ok: false,
+          error: 'python_spawn_failed',
+          details: String(r.error.message || r.error),
+        }
+      );
     }
-    return JSON.parse(String(r.stdout || '{}').trim());
-  } catch {
-    return null;
+
+    if (r.status !== 0) {
+      if (stderr) {
+        console.error('[mutagen] readTagsForFileSync: stderr', filePath, stderr.slice(0, 800));
+      }
+      return (
+        parsed || {
+          ok: false,
+          error: 'python_exit_nonzero',
+          details: String(r.status),
+        }
+      );
+    }
+
+    if (parsed && typeof parsed === 'object') {
+      return parsed;
+    }
+    return { ok: false, error: 'empty_or_invalid_json' };
+  } catch (e) {
+    console.error('[mutagen] readTagsForFileSync: exception', filePath, e?.message || e);
+    return { ok: false, error: 'read_tags_exception', details: String(e?.message || e) };
   }
 }
 

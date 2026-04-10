@@ -252,6 +252,10 @@
         font-size: 14px;
       }
 
+      .settings-global-msg.is-info {
+        border-left: 3px solid #3b82f6;
+      }
+
       .settings-jobs-table {
         width: 100%;
         max-width: 920px;
@@ -288,22 +292,6 @@
 
       .settings-jobs-table .job-result-failure {
         color: #f87171;
-      }
-
-      .settings-jobs-footnotes {
-        margin-top: 16px;
-        margin-bottom: 0;
-        padding-left: 1.35rem;
-        max-width: 640px;
-        list-style: disc;
-      }
-
-      .settings-jobs-footnotes li {
-        margin-top: 8px;
-      }
-
-      .settings-jobs-footnotes li:first-child {
-        margin-top: 0;
       }
     </style>
   </head>
@@ -541,6 +529,14 @@
           only). Denied and other statuses are not affected.
         </p>
       </div>
+      <div class="setting-row">
+        <label class="block-label" for="failedRequestAutoRetryDays">Automatically retry failed requests after (days)</label>
+        <input id="failedRequestAutoRetryDays" type="number" min="0" max="3650" step="1" />
+        <p class="setting-hint">
+          <code>0</code> disables automatic retry. When enabled, the completed-request clear job also retries failed requests
+          older than this age.
+        </p>
+      </div>
 
       <h2 class="settings-section-heading">Email</h2>
       <p class="setting-hint">
@@ -748,7 +744,7 @@
       <table class="settings-jobs-table" aria-label="Scheduled jobs">
         <thead>
           <tr>
-            <th scope="col">Job</th>
+            <th scope="col">Description</th>
             <th scope="col">Enabled</th>
             <th scope="col">Interval</th>
             <th scope="col">Last run</th>
@@ -803,7 +799,7 @@
             </td>
           </tr>
           <tr data-job-row="completed_request_clear">
-            <td>Clear completed request history</td>
+            <td>Clear completed requests and retry failed</td>
             <td><input type="checkbox" id="jobCompletedRequestClearEnabled" aria-label="Enable completed request clear job" /></td>
             <td><input type="number" id="jobCompletedRequestClearIntervalMinutes" min="5" max="10080" step="1" aria-label="Completed request clear interval minutes" /></td>
             <td class="job-schedule-meta" data-job-last="completed_request_clear">—</td>
@@ -837,16 +833,6 @@
           </tr>
         </tbody>
       </table>
-      <ul class="setting-hint settings-jobs-footnotes">
-        <li>
-          Completed history clearing uses <strong>Automatically clear completed requests after (days)</strong> on the General tab
-          (must be at least 1).
-        </li>
-        <li>Plex Sync does nothing if Plex integration is off.</li>
-        <li>
-          Status email requires SMTP and recipients under General → Email (interval 240–10080 minutes).
-        </li>
-      </ul>
       </div>
 
       <div id="settings-panel-users" class="settings-panel" role="tabpanel" aria-labelledby="tab-users" hidden>

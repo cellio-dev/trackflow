@@ -83,6 +83,7 @@ const updateSettingsStmt = db.prepare(`
       display_timezone = ?,
       plex_play_history_recommendations = ?,
       completed_request_auto_clear_days = ?,
+      failed_request_auto_retry_days = ?,
       job_library_scan_enabled = ?,
       job_plex_scan_enabled = ?,
       job_plex_playlist_sync_enabled = ?,
@@ -216,6 +217,14 @@ function clampDisplayTimezone(value) {
 }
 
 function clampCompletedRequestAutoClearDays(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) {
+    return 0;
+  }
+  return Math.min(3650, Math.floor(n));
+}
+
+function clampFailedRequestAutoRetryDays(value) {
   const n = Number(value);
   if (!Number.isFinite(n) || n < 0) {
     return 0;
@@ -376,6 +385,7 @@ function rowToJson(row) {
     completed_request_auto_clear_days: clampCompletedRequestAutoClearDays(
       row?.completed_request_auto_clear_days,
     ),
+    failed_request_auto_retry_days: clampFailedRequestAutoRetryDays(row?.failed_request_auto_retry_days),
     job_library_scan_enabled:
       row?.job_library_scan_enabled == null ? true : Number(row.job_library_scan_enabled) !== 0,
     job_plex_sync_enabled: resolveJobPlexSyncTripletForPersist(row) === 1,
@@ -524,6 +534,7 @@ function persistSettingsFromRow(row) {
     clampDisplayTimezone(row?.display_timezone),
     row?.plex_play_history_recommendations ? 1 : 0,
     clampCompletedRequestAutoClearDays(row?.completed_request_auto_clear_days),
+    clampFailedRequestAutoRetryDays(row?.failed_request_auto_retry_days),
     int01(row?.job_library_scan_enabled, true),
     jobPlexSync,
     jobPlexSync,
@@ -693,6 +704,10 @@ router.post('/', (req, res) => {
     body,
     'completed_request_auto_clear_days',
   );
+  const hasFailedAutoRetry = Object.prototype.hasOwnProperty.call(
+    body,
+    'failed_request_auto_retry_days',
+  );
   const hasJobLibScanEn = Object.prototype.hasOwnProperty.call(body, 'job_library_scan_enabled');
   const hasJobPlexSyncEn = Object.prototype.hasOwnProperty.call(body, 'job_plex_sync_enabled');
   const hasJobPlexScanEn = Object.prototype.hasOwnProperty.call(body, 'job_plex_scan_enabled');
@@ -767,6 +782,7 @@ router.post('/', (req, res) => {
     hasDisplayTimezone ||
     hasPlexPlayHist ||
     hasCompletedAutoClear ||
+    hasFailedAutoRetry ||
     hasFollowReqAuto ||
     hasJukeboxReqAuto;
 
@@ -1111,6 +1127,13 @@ router.post('/', (req, res) => {
       }
       next.completed_request_auto_clear_days = clampCompletedRequestAutoClearDays(n);
     }
+    if (hasFailedAutoRetry) {
+      const n = Number(body.failed_request_auto_retry_days);
+      if (!Number.isFinite(n) || n < 0 || n > 3650) {
+        return res.status(400).json({ error: 'failed_request_auto_retry_days must be 0–3650' });
+      }
+      next.failed_request_auto_retry_days = clampFailedRequestAutoRetryDays(n);
+    }
     if (hasJobLibScanEn) {
       if (typeof body.job_library_scan_enabled !== 'boolean') {
         return res.status(400).json({ error: 'job_library_scan_enabled must be a boolean' });
@@ -1328,36 +1351,37 @@ async function runPlexSyncWithTelemetry() {
   return withJobTelemetry(JOB_KEYS.plex_sync, () => runPlexSyncJob());
 }
 
-router.post('/trigger-plex-sync', async (req, res) => {
-  try {
-    const result = await runPlexSyncWithTelemetry();
-    return res.json(result);
-  } catch (error) {
-    console.error('trigger-plex-sync failed:', error.message, error.stack || '');
-    return res.status(500).json({ error: error.message || 'Plex Sync failed' });
-  }
+/** Manual Plex sync can take several minutes; respond immediately so proxies/browsers do not time out. */
+function respondPlexSyncStarted(res) {
+  return res.status(202).json({
+    ok: true,
+    started: true,
+    message:
+      'Plex sync started in the background. Job status below updates when it finishes; large libraries often take a few minutes.',
+  });
+}
+
+router.post('/trigger-plex-sync', (req, res) => {
+  void runPlexSyncWithTelemetry().catch((error) =>
+    console.error('trigger-plex-sync background run failed:', error.message, error.stack || ''),
+  );
+  return respondPlexSyncStarted(res);
 });
 
 /** @deprecated Use POST /api/settings/trigger-plex-sync */
-router.post('/trigger-plex-scan', async (req, res) => {
-  try {
-    const result = await runPlexSyncWithTelemetry();
-    return res.json(result);
-  } catch (error) {
-    console.error('trigger-plex-scan failed:', error.message, error.stack || '');
-    return res.status(500).json({ error: error.message || 'Plex Sync failed' });
-  }
+router.post('/trigger-plex-scan', (req, res) => {
+  void runPlexSyncWithTelemetry().catch((error) =>
+    console.error('trigger-plex-scan background run failed:', error.message, error.stack || ''),
+  );
+  return respondPlexSyncStarted(res);
 });
 
 /** @deprecated Use POST /api/settings/trigger-plex-sync */
-router.post('/trigger-plex-playlist-sync', async (req, res) => {
-  try {
-    const result = await runPlexSyncWithTelemetry();
-    return res.json(result);
-  } catch (error) {
-    console.error('trigger-plex-playlist-sync failed:', error.message, error.stack || '');
-    return res.status(500).json({ error: error.message || 'Plex Sync failed' });
-  }
+router.post('/trigger-plex-playlist-sync', (req, res) => {
+  void runPlexSyncWithTelemetry().catch((error) =>
+    console.error('trigger-plex-playlist-sync background run failed:', error.message, error.stack || ''),
+  );
+  return respondPlexSyncStarted(res);
 });
 
 router.post('/trigger-follow-sync', async (req, res) => {
@@ -1501,20 +1525,31 @@ router.post('/trigger-status-email', async (req, res) => {
   }
 });
 
-router.post('/trigger-clear-completed-requests', (req, res) => {
+router.post('/trigger-clear-completed-requests', async (req, res) => {
   try {
     const row = getSettingsStmt.get();
-    const days = clampCompletedRequestAutoClearDays(row?.completed_request_auto_clear_days);
-    if (days < 1) {
+    const clearDays = clampCompletedRequestAutoClearDays(row?.completed_request_auto_clear_days);
+    const retryDays = clampFailedRequestAutoRetryDays(row?.failed_request_auto_retry_days);
+    if (clearDays < 1 && retryDays < 1) {
       return res.status(400).json({
-        error: 'Set “Automatically clear completed requests” to at least 1 day in General first.',
+        error:
+          'Set “Automatically clear completed requests” or “Automatically retry failed requests” to at least 1 day in General first.',
       });
     }
-    const { clearCompletedRequestsOlderThanDays } = require('../services/requestBulkActions');
-    let summary;
+    const {
+      clearCompletedRequestsOlderThanDays,
+      retryFailedRequestsOlderThanDays,
+    } = require('../services/requestBulkActions');
+    let summary = { deletedTracks: 0, retried: 0 };
     withJobTelemetrySync(JOB_KEYS.completed_request_clear, () => {
-      summary = clearCompletedRequestsOlderThanDays({ older_than_days: days });
+      if (clearDays >= 1) {
+        summary = clearCompletedRequestsOlderThanDays({ older_than_days: clearDays });
+      }
     });
+    if (retryDays >= 1) {
+      const retrySummary = await retryFailedRequestsOlderThanDays({ older_than_days: retryDays });
+      summary.retried = Number(retrySummary?.retried) || 0;
+    }
     return res.json(summary);
   } catch (error) {
     console.error('trigger-clear-completed-requests failed:', error.message);

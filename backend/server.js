@@ -10,6 +10,8 @@ ensureSessionSecret();
 
 const express = require('express');
 const session = require('express-session');
+const BetterSqlite3StoreFactory = require('better-sqlite3-session-store');
+const { getDb } = require('./db');
 
 const searchRoutes = require('./routes/search');
 const discoverRoutes = require('./routes/discover');
@@ -27,6 +29,7 @@ const manualImportRoutes = require('./routes/manualImport');
 const { requireAuth, requireAdmin, requireJukeboxEnabled } = require('./middleware/auth');
 
 const app = express();
+const BetterSqlite3Store = BetterSqlite3StoreFactory(session);
 
 // So express-session cookie.secure: 'auto' matches the client connection behind TLS termination.
 const trustProxyRaw = process.env.TRUST_PROXY;
@@ -42,9 +45,18 @@ if (trustProxyRaw === '1' || /^true$/i.test(String(trustProxyRaw || '').trim()))
 // Parse JSON request bodies
 app.use(express.json());
 
+const sessionStore = new BetterSqlite3Store({
+  client: getDb(),
+  expired: {
+    clear: true,
+    intervalMs: 15 * 60 * 1000,
+  },
+});
+
 app.use(
   session({
     secret: process.env.SESSION_SECRET,
+    store: sessionStore,
     resave: false,
     saveUninitialized: false,
     cookie: {
@@ -95,7 +107,6 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal Server Error' });
 });
 
-const { getDb } = require('./db');
 const { resumeProcessingRequestsAfterRestart } = require('./services/requestApproval');
 const { runLibraryScanJob } = require('./jobs/libraryScanJob');
 const { runPlexSyncJob } = require('./jobs/plexSyncJob');
@@ -106,10 +117,12 @@ const {
 } = require('./jobs/orphanDownloadsCleanup');
 const { runFollowSyncJob } = require('./jobs/followSyncJob');
 const { runDiscoverCacheRefreshJob } = require('./jobs/discoverCacheRefreshJob');
-const { clearCompletedRequestsOlderThanDays } = require('./services/requestBulkActions');
+const {
+  clearCompletedRequestsOlderThanDays,
+  retryFailedRequestsOlderThanDays,
+} = require('./services/requestBulkActions');
 const {
   withJobTelemetry,
-  withJobTelemetrySync,
   JOB_KEYS,
 } = require('./services/jobScheduleTelemetry');
 const { runStatusEmailJob, isStatusEmailDeliveryReady } = require('./jobs/statusEmailJob');
@@ -128,6 +141,7 @@ const getJobScheduleRowStmt = getDb().prepare(`
     job_completed_request_clear_enabled,
     job_completed_request_clear_interval_minutes,
     completed_request_auto_clear_days,
+    failed_request_auto_retry_days,
     job_status_email_enabled,
     status_email_interval_minutes,
     smtp_host,
@@ -157,7 +171,7 @@ const server = app.listen(PORT, () => {
     void resumeProcessingRequestsAfterRestart();
   });
 
-  function tickScheduledJobs() {
+  async function tickScheduledJobs() {
     const now = Date.now();
     let row;
     try {
@@ -221,15 +235,21 @@ const server = app.listen(PORT, () => {
 
     const clearOn = Number(row.job_completed_request_clear_enabled) === 1;
     const clearDays = Math.max(0, Math.min(3650, Math.floor(Number(row.completed_request_auto_clear_days) || 0)));
+    const retryDays = Math.max(0, Math.min(3650, Math.floor(Number(row.failed_request_auto_retry_days) || 0)));
     const clearIntMin = Math.max(
       5,
       Math.min(10080, Math.floor(Number(row.job_completed_request_clear_interval_minutes) || 1440)),
     );
-    if (clearOn && clearDays >= 1 && now - lastCompletedRequestClearAt >= clearIntMin * 60_000) {
+    if (clearOn && (clearDays >= 1 || retryDays >= 1) && now - lastCompletedRequestClearAt >= clearIntMin * 60_000) {
       lastCompletedRequestClearAt = now;
       try {
-        withJobTelemetrySync(JOB_KEYS.completed_request_clear, () => {
-          clearCompletedRequestsOlderThanDays({ older_than_days: clearDays });
+        await withJobTelemetry(JOB_KEYS.completed_request_clear, async () => {
+          if (clearDays >= 1) {
+            clearCompletedRequestsOlderThanDays({ older_than_days: clearDays });
+          }
+          if (retryDays >= 1) {
+            await retryFailedRequestsOlderThanDays({ older_than_days: retryDays });
+          }
         });
       } catch (err) {
         console.error('completed request history clear failed:', err?.message || err);
@@ -245,13 +265,15 @@ const server = app.listen(PORT, () => {
     }
   }
 
-  setInterval(tickScheduledJobs, 60_000);
+  setInterval(() => {
+    void tickScheduledJobs();
+  }, 60_000);
   console.log(
     'Scheduled jobs: library, status email, Plex Sync, follow sync, discover cache, completed-request clear, orphan cleanup (intervals from settings; checked each minute)',
   );
 
   setTimeout(() => {
-    tickScheduledJobs();
+    void tickScheduledJobs();
   }, 35_000);
   setTimeout(() => {
     void withJobTelemetry(JOB_KEYS.library_scan, () => runLibraryScanJob()).catch((e) =>

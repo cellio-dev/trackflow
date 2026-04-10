@@ -14,6 +14,7 @@ const {
   clearHistoryOlderThanDays,
   clearHistoryTrackByStatus,
   clearHistoryFollowByOutcome,
+  TRACK_HISTORY_STATUS_FILTERS,
 } = require('../services/requestBulkActions');
 const { listAllFollowHistory, getFollowHistoryById, deleteFollowHistoryById } = require('../services/followRequestHistory');
 const { usernamesByIds, usernameForId } = require('../services/userDisplay');
@@ -23,6 +24,12 @@ const {
   enrichRequestRowWithLibraryMatch,
   isTrackAlreadyInLibraryOrPlex,
 } = require('../services/libraryAvailability');
+const {
+  listBlockedTracks,
+  deleteBlockedTrackById,
+  clearBlockedTracks,
+  isTrackBlocked,
+} = require('../services/blockedTracks');
 const { requireAdmin, sessionUserIdString } = require('../middleware/auth');
 
 const router = express.Router();
@@ -254,6 +261,103 @@ router.post('/clear-history-status', requireAdmin, async (req, res) => {
   }
 });
 
+// POST /api/requests/clear-track-status — clear selected track status bucket from track requests table
+router.post('/clear-track-status', requireAdmin, (req, res) => {
+  try {
+    const trackStatus = typeof req.body?.track_status === 'string' ? req.body.track_status.trim() : '';
+    if (!TRACK_HISTORY_STATUS_FILTERS[trackStatus]) {
+      return res.status(400).json({ error: 'Invalid track_status' });
+    }
+    const scopedUser = resolveBulkUserId(req);
+    const summary = clearHistoryTrackByStatus({
+      userId: scopedUser,
+      track_status: trackStatus,
+    });
+    return res.json({ deletedTracks: summary.deleted || 0 });
+  } catch (error) {
+    console.error('clear-track-status failed:', error.message);
+    return res.status(500).json({ error: 'clear-track-status failed' });
+  }
+});
+
+// POST /api/requests/clear-follow-status — clear selected follow status bucket from follow requests table
+router.post('/clear-follow-status', requireAdmin, (req, res) => {
+  try {
+    const followOutcome =
+      typeof req.body?.follow_outcome === 'string' ? req.body.follow_outcome.trim().toLowerCase() : '';
+    if (followOutcome !== 'approved' && followOutcome !== 'denied' && followOutcome !== 'all') {
+      return res.status(400).json({ error: 'follow_outcome must be approved, denied, or all' });
+    }
+    const scopedUser = resolveBulkUserId(req);
+    if (followOutcome === 'all') {
+      const approved = clearHistoryFollowByOutcome({
+        userId: scopedUser,
+        follow_outcome: 'approved',
+      });
+      const denied = clearHistoryFollowByOutcome({
+        userId: scopedUser,
+        follow_outcome: 'denied',
+      });
+      return res.json({ deletedFollows: (approved.changes || 0) + (denied.changes || 0) });
+    }
+    const one = clearHistoryFollowByOutcome({
+      userId: scopedUser,
+      follow_outcome: followOutcome,
+    });
+    return res.json({ deletedFollows: one.changes || 0 });
+  } catch (error) {
+    console.error('clear-follow-status failed:', error.message);
+    return res.status(500).json({ error: 'clear-follow-status failed' });
+  }
+});
+
+// GET /api/requests/blocklist
+router.get('/blocklist', requireAdmin, (req, res) => {
+  try {
+    const userId = resolveBulkUserId(req);
+    const rows = listBlockedTracks({ userId });
+    const nameMap = usernamesByIds(rows.map((r) => r.user_id));
+    const results = rows.map((r) => ({
+      ...r,
+      requested_by_username: usernameForId(nameMap, r.user_id),
+    }));
+    return res.json({ results });
+  } catch (error) {
+    console.error('blocklist list failed:', error.message);
+    return res.status(500).json({ error: 'Failed to load blocklist' });
+  }
+});
+
+// DELETE /api/requests/blocklist/:id
+router.delete('/blocklist/:id', requireAdmin, (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ error: 'Invalid id' });
+    }
+    const r = deleteBlockedTrackById(id);
+    if (!r.changes) {
+      return res.status(404).json({ error: 'Not found' });
+    }
+    return res.status(204).send();
+  } catch (error) {
+    console.error('blocklist delete failed:', error.message);
+    return res.status(500).json({ error: 'Failed to delete blocklist row' });
+  }
+});
+
+// POST /api/requests/blocklist/clear
+router.post('/blocklist/clear', requireAdmin, (req, res) => {
+  try {
+    const userId = resolveBulkUserId(req);
+    const summary = clearBlockedTracks({ userId });
+    return res.json(summary);
+  } catch (error) {
+    console.error('blocklist clear failed:', error.message);
+    return res.status(500).json({ error: 'Failed to clear blocklist' });
+  }
+});
+
 // GET /api/requests/follow-history
 router.get('/follow-history', requireAdmin, async (req, res) => {
   try {
@@ -402,11 +506,6 @@ router.post('/', async (req, res) => {
     if (existingRequest) {
       const st = String(existingRequest.status || '');
       const cancelled = Number(existingRequest.cancelled) === 1;
-      if (st === 'denied') {
-        return res.status(400).json({
-          error: 'This track was denied and cannot be requested again',
-        });
-      }
       if (st === 'failed' && !cancelled) {
         return res.status(400).json({
           error: 'This request needs attention; resolve or clear it before requesting again',
@@ -414,6 +513,12 @@ router.post('/', async (req, res) => {
       }
       const withLib = await enrichRequestRowWithLibraryMatch(existingRequest);
       return res.json(enrichRequestRow(withLib));
+    }
+
+    if (isTrackBlocked(rowProbe)) {
+      return res.status(400).json({
+        error: 'This track is blocked due to a prior denial',
+      });
     }
 
     const insertResult = insertRequestStmt.run({

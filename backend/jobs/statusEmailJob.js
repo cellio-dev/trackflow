@@ -34,7 +34,7 @@ const JOB_EMAIL_LABELS = {
   [JOB_KEYS.library_scan]: 'Scan library files in folder',
   [JOB_KEYS.follow_sync]: 'Sync followed artists and playlists tracks',
   [JOB_KEYS.orphan_cleanup]: 'Completed download folder cleanup',
-  [JOB_KEYS.completed_request_clear]: 'Clear completed request history',
+  [JOB_KEYS.completed_request_clear]: 'Clear completed requests and retry failed',
   [JOB_KEYS.status_email]: 'Send status email (digest)',
   [JOB_KEYS.plex_sync]: 'Plex Sync (rating keys + playlists)',
 };

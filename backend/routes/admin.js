@@ -11,6 +11,7 @@ const { findPresentTrackForProbe } = require('../services/tracksDb');
 const { enrichRequestRow } = require('../services/requestDisplayStatus');
 const { usernamesByIds, usernameForId } = require('../services/userDisplay');
 const { recordFollowResolution } = require('../services/followRequestHistory');
+const { addBlockedTrackFromRequestRow } = require('../services/blockedTracks');
 
 const router = express.Router();
 const db = getDb();
@@ -39,16 +40,15 @@ const setCompletedFromLibraryStmt = db.prepare(`
   WHERE id = ?
 `);
 
-const setDeniedStmt = db.prepare(`
-  UPDATE requests
-  SET status = 'denied', processing_phase = NULL
-  WHERE id = ?
-`);
-
 const deleteRequestStmt = db.prepare(`
   DELETE FROM requests
   WHERE id = ?
 `);
+
+const moveRequestToBlocklistTx = db.transaction((requestRow) => {
+  addBlockedTrackFromRequestRow(requestRow, 'denied');
+  deleteRequestStmt.run(requestRow.id);
+});
 
 // GET /api/admin
 router.get('/', async (req, res) => {
@@ -82,7 +82,7 @@ router.post('/requests/:id/approve', async (req, res) => {
   }
 });
 
-// POST /api/admin/requests/:id/deny — pending/requested → denied; failed (needs attention) → denied
+// POST /api/admin/requests/:id/deny — pending/requested/failed(needs-attention) → blocked_tracks
 router.post('/requests/:id/deny', (req, res) => {
   const requestId = Number(req.params.id);
   if (!Number.isInteger(requestId) || requestId <= 0) {
@@ -104,9 +104,12 @@ router.post('/requests/:id/deny', (req, res) => {
       return res.status(400).json({ error: 'Request cannot be denied in its current state' });
     }
 
-    setDeniedStmt.run(requestId);
-    const updated = getRequestByIdStmt.get(requestId);
-    return res.json(enrichRequestRow(updated));
+    moveRequestToBlocklistTx(existing);
+    return res.json({
+      ok: true,
+      blocked: true,
+      request_id: requestId,
+    });
   } catch (error) {
     console.error('Failed to deny request:', error.message);
     return res.status(500).json({ error: 'Failed to deny request' });

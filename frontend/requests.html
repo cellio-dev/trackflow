@@ -71,16 +71,69 @@
         margin-top: 24px;
       }
 
-      .request-history-section {
-        margin-top: 32px;
-      }
-
       .requests-table-toolbar {
         display: flex;
         flex-wrap: wrap;
         align-items: center;
         gap: 10px 16px;
         margin: 12px 0 16px;
+      }
+      .requests-toolbar-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        margin: 12px 0 20px;
+      }
+      .requests-toolbar-row .bulk-actions-spacer {
+        flex: 1 1 auto;
+        min-width: 8px;
+      }
+      .bulk-actions .bulk-actions-spacer {
+        flex: 1 1 auto;
+      }
+      .requests-filter-dropdown {
+        position: relative;
+      }
+      .requests-filter-trigger {
+        border: 1px solid #ccc;
+        background: #fff;
+        border-radius: 6px;
+        padding: 6px 12px;
+        font-size: 13px;
+        cursor: pointer;
+      }
+      .requests-filter-menu {
+        position: absolute;
+        right: 0;
+        top: calc(100% + 6px);
+        min-width: 220px;
+        padding: 10px;
+        border: 1px solid #d9d9d9;
+        border-radius: 8px;
+        background: #fff;
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+        z-index: 50;
+      }
+      .requests-filter-menu[hidden] {
+        display: none;
+      }
+      .requests-filter-option {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 6px 0;
+        font-size: 13px;
+        color: #1a1a1a;
+        font-weight: 500;
+      }
+      .requests-filter-option span {
+        color: #141414;
+      }
+      .requests-filter-divider {
+        border: none;
+        border-top: 1px solid #eee;
+        margin: 8px 0;
       }
 
       .requests-status-filter-label {
@@ -96,6 +149,9 @@
         border: 1px solid #ccc;
         border-radius: 6px;
         background: #fff;
+      }
+      .requests-status-filter[multiple] {
+        min-height: 120px;
       }
 
       .requests-table-wrap {
@@ -180,6 +236,18 @@
         align-items: center;
         margin: 12px 0 20px;
       }
+      .requests-toolbar-row .bulk-actions {
+        margin: 0;
+        flex: 0 1 auto;
+      }
+      .bulk-actions .bulk-inline-summary {
+        margin: 0;
+        width: 100%;
+        flex-basis: 100%;
+        font-size: 13px;
+        color: #333;
+        min-height: 1.2em;
+      }
 
       .bulk-actions button {
         padding: 6px 12px;
@@ -252,26 +320,50 @@
 
           <section class="follow-requests-section" aria-labelledby="followRequestsHeading">
             <h2 id="followRequestsHeading" class="follow-requests-heading">Follow requests</h2>
-            <div class="bulk-actions admin-only" id="followBulkActionsBar">
-              <button type="button" id="followApproveAllBtn">Approve All</button>
-              <button type="button" id="followDenyAllBtn">Deny All</button>
-              <p id="followBulkSummary" class="bulk-inline-summary" aria-live="polite"></p>
+            <div class="requests-toolbar-row">
+              <div class="bulk-actions admin-only" id="followBulkActionsBar">
+                <button type="button" id="followApproveAllBtn">Approve All</button>
+                <button type="button" id="followDenyAllBtn">Deny All</button>
+                <select id="followClearStatusSelect" aria-label="Select follow status to clear">
+                  <option value="all" selected>Clear All</option>
+                  <option value="approved">Clear Approved</option>
+                  <option value="denied">Clear Denied</option>
+                </select>
+                <button type="button" id="followClearStatusBtn">Apply</button>
+                <p id="followBulkSummary" class="bulk-inline-summary" aria-live="polite"></p>
+              </div>
+              <span class="bulk-actions-spacer" aria-hidden="true"></span>
+              <div id="followFilterDropdown" class="requests-filter-dropdown">
+                <button type="button" id="followFilterBtn" class="requests-filter-trigger">Filter</button>
+                <div id="followFilterMenu" class="requests-filter-menu" hidden>
+                  <label class="requests-filter-option">
+                    <input type="checkbox" data-follow-filter="pending" />
+                    <span>Pending</span>
+                  </label>
+                  <label class="requests-filter-option">
+                    <input type="checkbox" data-follow-filter="approved" />
+                    <span>Approved</span>
+                  </label>
+                  <label class="requests-filter-option">
+                    <input type="checkbox" data-follow-filter="denied" />
+                    <span>Denied</span>
+                  </label>
+                  <hr class="requests-filter-divider" />
+                  <label class="requests-filter-option">
+                    <input type="checkbox" data-follow-filter-all />
+                    <span>Select All</span>
+                  </label>
+                </div>
+              </div>
             </div>
             <p class="follow-requests-hint follow-requests-hint--self">
               Playlist or artist follows you requested that are still waiting for an administrator to approve.
             </p>
-            <div class="requests-table-toolbar">
-              <label class="requests-status-filter-label" for="followTypeFilter">Show</label>
-              <select id="followTypeFilter" class="requests-status-filter" aria-label="Filter follow requests">
-                <option value="">All</option>
-                <option value="playlist">Playlists only</option>
-                <option value="artist">Artists only</option>
-              </select>
-            </div>
             <div class="requests-table-wrap">
               <table class="requests-table follow-requests-table">
                 <thead>
                   <tr>
+                    <th scope="col">Status</th>
                     <th scope="col">Type</th>
                     <th scope="col">Title</th>
                     <th scope="col" class="admin-only">User</th>
@@ -286,22 +378,52 @@
 
           <section class="track-requests-section" aria-labelledby="trackRequestsHeading">
             <h2 id="trackRequestsHeading" class="follow-requests-heading">Track requests</h2>
-            <div class="bulk-actions admin-only" id="trackBulkActionsBar">
-              <button type="button" id="approveAllBtn">Approve All</button>
-              <button type="button" id="denyAllBtn">Deny All</button>
-              <button type="button" id="cancelAllBtn">Cancel All</button>
-              <button type="button" id="retryFailedBtn">Retry Failed</button>
-              <p id="trackBulkSummary" class="bulk-inline-summary" aria-live="polite"></p>
-            </div>
-            <div class="requests-table-toolbar">
-            <label class="requests-status-filter-label" for="statusFilter">Status</label>
-            <select id="statusFilter" class="requests-status-filter" aria-label="Filter active requests by status">
-              <option value="">All active</option>
-              <option value="pending">Pending</option>
-              <option value="requested">Requested</option>
-              <option value="processing">Processing</option>
-              <option value="failed">Failed (needs attention)</option>
-            </select>
+            <div class="requests-toolbar-row">
+              <div class="bulk-actions admin-only" id="trackBulkActionsBar">
+                <button type="button" id="approveAllBtn">Approve All</button>
+                <button type="button" id="denyAllBtn">Deny All</button>
+                <button type="button" id="cancelAllBtn">Cancel All</button>
+                <button type="button" id="retryFailedBtn">Retry Failed</button>
+                <select id="trackClearStatusSelect" aria-label="Select track status to clear">
+                  <option value="all" selected>Clear All</option>
+                  <option value="available">Clear Available</option>
+                  <option value="cancelled">Clear Cancelled</option>
+                  <option value="denied">Clear Denied</option>
+                </select>
+                <button type="button" id="trackClearStatusBtn">Apply</button>
+                <p id="trackBulkSummary" class="bulk-inline-summary" aria-live="polite"></p>
+              </div>
+              <span class="bulk-actions-spacer" aria-hidden="true"></span>
+              <div id="trackFilterDropdown" class="requests-filter-dropdown">
+                <button type="button" id="trackFilterBtn" class="requests-filter-trigger">Filter</button>
+                <div id="trackFilterMenu" class="requests-filter-menu" hidden>
+                  <label class="requests-filter-option">
+                    <input type="checkbox" data-track-filter="pending" />
+                    <span>Requested</span>
+                  </label>
+                  <label class="requests-filter-option">
+                    <input type="checkbox" data-track-filter="processing" />
+                    <span>Processing</span>
+                  </label>
+                  <label class="requests-filter-option">
+                    <input type="checkbox" data-track-filter="available" />
+                    <span>Available</span>
+                  </label>
+                  <label class="requests-filter-option">
+                    <input type="checkbox" data-track-filter="needs_attention" />
+                    <span>Needs attention</span>
+                  </label>
+                  <label class="requests-filter-option">
+                    <input type="checkbox" data-track-filter="denied" />
+                    <span>Denied</span>
+                  </label>
+                  <hr class="requests-filter-divider" />
+                  <label class="requests-filter-option">
+                    <input type="checkbox" data-track-filter-all />
+                    <span>Select All</span>
+                  </label>
+                </div>
+              </div>
             </div>
 
             <div class="requests-table-wrap">
@@ -352,89 +474,6 @@
                 </tr>
               </thead>
               <tbody id="requestsBody"></tbody>
-            </table>
-            </div>
-          </section>
-
-          <section class="request-history-section admin-only" aria-labelledby="requestHistoryHeading">
-            <h2 id="requestHistoryHeading" class="follow-requests-heading">Request history</h2>
-            <div class="bulk-actions" id="historyBulkActionsBar">
-              <button type="button" id="clearHistoryBtn">Clear All</button>
-              <button type="button" class="history-status-clear-btn" data-track-status="completed">Clear Completed</button>
-              <button type="button" class="history-status-clear-btn" data-track-status="denied">Clear Denied</button>
-              <button type="button" class="history-status-clear-btn" data-track-status="available">Clear Available</button>
-              <button type="button" class="history-status-clear-btn" data-track-status="cancelled">
-                Clear Cancelled
-              </button>
-              <button type="button" class="history-follow-clear-btn" data-follow-outcome="approved">
-                Clear Follow Approved
-              </button>
-              <button type="button" class="history-follow-clear-btn" data-follow-outcome="denied">
-                Clear Follow Denied
-              </button>
-              <p id="historyBulkSummary" class="bulk-inline-summary" aria-live="polite"></p>
-            </div>
-            <div class="requests-table-toolbar">
-              <label class="requests-status-filter-label" for="historyTypeFilter">Show</label>
-              <select id="historyTypeFilter" class="requests-status-filter" aria-label="Filter request history">
-                <option value="">All history</option>
-                <option value="track">Tracks only</option>
-                <option value="follow">Follows only</option>
-              </select>
-            </div>
-            <div class="requests-table-wrap">
-            <table class="requests-table requests-history-table">
-              <thead>
-                <tr>
-                  <th scope="col" class="requests-th-sortable">
-                    <button type="button" class="requests-sort-btn" data-history-sort="type">
-                      Type <span class="sort-indicator" aria-hidden="true"></span>
-                    </button>
-                  </th>
-                  <th scope="col" class="requests-th-sortable">
-                    <button type="button" class="requests-sort-btn" data-history-sort="title">
-                      Title <span class="sort-indicator" aria-hidden="true"></span>
-                    </button>
-                  </th>
-                  <th scope="col" class="requests-th-sortable">
-                    <button type="button" class="requests-sort-btn" data-history-sort="artist">
-                      Artist <span class="sort-indicator" aria-hidden="true"></span>
-                    </button>
-                  </th>
-                  <th scope="col" class="requests-th-sortable">
-                    <button type="button" class="requests-sort-btn" data-history-sort="album">
-                      Album <span class="sort-indicator" aria-hidden="true"></span>
-                    </button>
-                  </th>
-                  <th scope="col" class="admin-only requests-th-sortable">
-                    <button type="button" class="requests-sort-btn" data-history-sort="user">
-                      User <span class="sort-indicator" aria-hidden="true"></span>
-                    </button>
-                  </th>
-                  <th scope="col" class="requests-th-sortable">
-                    <button type="button" class="requests-sort-btn" data-history-sort="source">
-                      Source <span class="sort-indicator" aria-hidden="true"></span>
-                    </button>
-                  </th>
-                  <th scope="col" class="requests-th-sortable">
-                    <button type="button" class="requests-sort-btn" data-history-sort="when">
-                      Requested <span class="sort-indicator" aria-hidden="true"></span>
-                    </button>
-                  </th>
-                  <th scope="col" class="requests-th-sortable">
-                    <button type="button" class="requests-sort-btn" data-history-sort="status">
-                      Status <span class="sort-indicator" aria-hidden="true"></span>
-                    </button>
-                  </th>
-                  <th scope="col" class="admin-only requests-th-sortable">
-                    <button type="button" class="requests-sort-btn" data-history-sort="processing">
-                      Processing status <span class="sort-indicator" aria-hidden="true"></span>
-                    </button>
-                  </th>
-                  <th scope="col">Actions</th>
-                </tr>
-              </thead>
-              <tbody id="requestHistoryBody"></tbody>
             </table>
             </div>
           </section>

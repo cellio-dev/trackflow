@@ -230,6 +230,7 @@ function buildJobScheduleStatusPayload(settingsRow) {
     settingsRow?.job_plex_sync_enabled == null || Number(settingsRow.job_plex_sync_enabled) !== 0;
   const completedJobOn = Number(settingsRow?.job_completed_request_clear_enabled) === 1;
   const completedDays = clampCompletedDays(settingsRow?.completed_request_auto_clear_days);
+  const retryDays = clampCompletedDays(settingsRow?.failed_request_auto_retry_days);
   const orphanOn =
     settingsRow?.slskd_orphan_cleanup_enabled == null || Number(settingsRow.slskd_orphan_cleanup_enabled) !== 0;
 
@@ -280,11 +281,11 @@ function buildJobScheduleStatusPayload(settingsRow) {
     [JOB_KEYS.completed_request_clear]: pack(
       JOB_KEYS.completed_request_clear,
       completedClearIntervalMs(settingsRow),
-      completedJobOn && completedDays >= 1,
+      completedJobOn && (completedDays >= 1 || retryDays >= 1),
       !completedJobOn
         ? 'Job disabled'
-        : completedDays < 1
-          ? 'Set completed retention to ≥ 1 day (General)'
+        : completedDays < 1 && retryDays < 1
+          ? 'Set completed clear/retry failed to >= 1 day (General)'
           : null,
     ),
     [JOB_KEYS.status_email]: pack(

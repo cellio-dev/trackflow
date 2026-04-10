@@ -111,9 +111,24 @@ miAnalyzeBtn?.addEventListener('click', async () => {
       body: fd,
       credentials: 'same-origin',
     });
-    const data = await res.json().catch(() => ({}));
+    const rawBody = await res.text();
+    let data = {};
+    try {
+      data = rawBody ? JSON.parse(rawBody) : {};
+    } catch {
+      const hint = rawBody.trim().slice(0, 200);
+      throw new Error(
+        hint ||
+          res.statusText ||
+          (res.status ? `Request failed (HTTP ${res.status})` : 'Could not read server response'),
+      );
+    }
     if (!res.ok) {
-      throw new Error(data.error || res.statusText);
+      throw new Error(
+        data.error ||
+          res.statusText ||
+          (res.status ? `Request failed (HTTP ${res.status})` : 'Analyze failed'),
+      );
     }
     uploadToken = data.uploadToken;
     fileMeta = data.file || {};

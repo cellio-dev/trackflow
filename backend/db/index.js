@@ -519,6 +519,54 @@ db.exec(`
 `);
 
 db.exec(`
+  CREATE TABLE IF NOT EXISTS blocked_tracks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    deezer_id TEXT,
+    title TEXT NOT NULL,
+    artist TEXT NOT NULL,
+    album TEXT,
+    user_id TEXT,
+    request_type TEXT NOT NULL DEFAULT 'Track',
+    blocked_reason TEXT NOT NULL DEFAULT 'denied',
+    duration_seconds INTEGER,
+    requested_at TEXT,
+    blocked_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+`);
+
+db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_blocked_tracks_user ON blocked_tracks(user_id);
+`);
+
+db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_blocked_tracks_deezer_id ON blocked_tracks(deezer_id);
+`);
+
+db.exec(`
+  INSERT INTO blocked_tracks (
+    deezer_id, title, artist, album, user_id, request_type, blocked_reason, duration_seconds, requested_at, blocked_at
+  )
+  SELECT
+    deezer_id,
+    COALESCE(NULLIF(TRIM(title), ''), 'Unknown'),
+    COALESCE(NULLIF(TRIM(artist), ''), 'Unknown'),
+    album,
+    user_id,
+    COALESCE(NULLIF(TRIM(request_type), ''), 'Track'),
+    'denied',
+    duration_seconds,
+    created_at,
+    datetime('now')
+  FROM requests
+  WHERE status = 'denied';
+`);
+
+db.exec(`
+  DELETE FROM requests
+  WHERE status = 'denied';
+`);
+
+db.exec(`
   CREATE INDEX IF NOT EXISTS idx_follow_request_history_user ON follow_request_history(user_id);
 `);
 
@@ -577,6 +625,10 @@ ensureSettingsColumn(
 ensureSettingsColumn(
   'completed_request_auto_clear_days',
   `ALTER TABLE settings ADD COLUMN completed_request_auto_clear_days INTEGER NOT NULL DEFAULT 0;`,
+);
+ensureSettingsColumn(
+  'failed_request_auto_retry_days',
+  `ALTER TABLE settings ADD COLUMN failed_request_auto_retry_days INTEGER NOT NULL DEFAULT 0;`,
 );
 ensureSettingsColumn(
   'job_library_scan_enabled',

@@ -3,6 +3,7 @@
 const { getDb } = require('../db');
 const { approveRequestById } = require('./requestApproval');
 const { isTrackAlreadyInLibraryOrPlex } = require('./libraryAvailability');
+const { normMeta } = require('./tracksDb');
 
 function normalizeRawTrack(track) {
   const deezerId = track?.id != null ? String(track.id) : null;
@@ -14,6 +15,44 @@ function normalizeRawTrack(track) {
       ? Math.round(Number(track.duration))
       : null;
   return { deezerId, title, artist, album, durationSeconds };
+}
+
+function durationsClose(a, b, tol = 2) {
+  const x = Number(a);
+  const y = Number(b);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) {
+    return false;
+  }
+  return Math.abs(Math.round(x) - Math.round(y)) <= tol;
+}
+
+function tracksLikelySameRequest(a, b) {
+  const aid = a?.deezerId != null ? String(a.deezerId).trim() : '';
+  const bid = b?.deezerId != null ? String(b.deezerId).trim() : '';
+  if (aid && bid && aid === bid) {
+    return true;
+  }
+
+  const aa = normMeta(a?.artist);
+  const at = normMeta(a?.title);
+  const ba = normMeta(b?.artist);
+  const bt = normMeta(b?.title);
+  if (!aa || !at || !ba || !bt) {
+    return false;
+  }
+
+  const artistOk = aa === ba || aa.includes(ba) || ba.includes(aa);
+  const titleOk = at === bt || at.includes(bt) || bt.includes(at);
+  if (!artistOk || !titleOk) {
+    return false;
+  }
+
+  const ad = a?.durationSeconds;
+  const bd = b?.durationSeconds;
+  if (ad == null || bd == null) {
+    return true;
+  }
+  return durationsClose(ad, bd, 2);
 }
 
 /**
@@ -32,6 +71,12 @@ async function ingestRawDeezerTracks(rawTracks, options) {
     FROM requests
     WHERE deezer_id = ?
   `);
+  const listComparableRequestRowsStmt = db.prepare(`
+    SELECT deezer_id, title, artist, duration_seconds, status, cancelled
+    FROM requests
+    WHERE status IN ('pending', 'requested', 'processing', 'completed', 'available')
+       OR (status = 'failed' AND COALESCE(cancelled, 0) = 0)
+  `);
 
   const insertRequestStmt = db.prepare(`
     INSERT INTO requests (deezer_id, title, artist, album, user_id, status, duration_seconds, request_type)
@@ -39,6 +84,9 @@ async function ingestRawDeezerTracks(rawTracks, options) {
   `);
 
   const safeTracks = Array.isArray(rawTracks) ? rawTracks : [];
+  const existingComparable = listComparableRequestRowsStmt.all();
+  /** @type {Array<{ deezerId: string|null, title: string, artist: string, durationSeconds: number|null }>} */
+  const seenThisBatch = [];
   let newly_requested = 0;
   let skipped_existing = 0;
   let skipped_in_library = 0;
@@ -52,6 +100,29 @@ async function ingestRawDeezerTracks(rawTracks, options) {
     }
 
     if (getRequestByDeezerIdStmt.get(deezerId)) {
+      skipped_existing += 1;
+      continue;
+    }
+
+    const candidate = { deezerId, title, artist, durationSeconds };
+    const hasSimilarExisting = existingComparable.some((row) =>
+      tracksLikelySameRequest(candidate, {
+        deezerId: row?.deezer_id != null ? String(row.deezer_id).trim() : null,
+        title: row?.title,
+        artist: row?.artist,
+        durationSeconds:
+          row?.duration_seconds != null && Number.isFinite(Number(row.duration_seconds))
+            ? Math.round(Number(row.duration_seconds))
+            : null,
+      }),
+    );
+    if (hasSimilarExisting) {
+      skipped_existing += 1;
+      continue;
+    }
+
+    const hasSimilarInBatch = seenThisBatch.some((prev) => tracksLikelySameRequest(candidate, prev));
+    if (hasSimilarInBatch) {
       skipped_existing += 1;
       continue;
     }
@@ -84,6 +155,7 @@ async function ingestRawDeezerTracks(rawTracks, options) {
     if (auto) {
       await approveRequestById(insertResult.lastInsertRowid);
     }
+    seenThisBatch.push(candidate);
   }
 
   return {

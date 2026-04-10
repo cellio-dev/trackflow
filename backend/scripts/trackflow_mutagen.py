@@ -51,111 +51,135 @@ def read_tags(path: str) -> dict:
     if not p.is_file():
         return {"ok": False, "error": "not_a_file"}
 
-    audio = File(str(p), easy=False)
+    try:
+        audio = File(str(p), easy=False)
+    except Exception as e:
+        # Corrupt/partial files often raise (e.g. HeaderNotFoundError); Node still has filename fallback.
+        _log_import_error("read_tags: File() open/load", e)
+        return {
+            "ok": True,
+            "trackflow_id": None,
+            "artist": None,
+            "title": None,
+            "album": None,
+            "duration_seconds": None,
+        }
+
     if audio is None:
         return {"ok": True, "trackflow_id": None, "artist": None, "title": None, "album": None, "duration_seconds": None}
 
-    duration_seconds = None
-    if getattr(audio.info, "length", None) is not None:
-        try:
-            duration_seconds = int(round(float(audio.info.length)))
-        except (TypeError, ValueError):
-            pass
+    try:
+        duration_seconds = None
+        if getattr(audio.info, "length", None) is not None:
+            try:
+                duration_seconds = int(round(float(audio.info.length)))
+            except (TypeError, ValueError):
+                pass
 
-    trackflow_id = None
-    artist = None
-    title = None
-    album = None
+        trackflow_id = None
+        artist = None
+        title = None
+        album = None
 
-    # ID3 (MP3)
-    if hasattr(audio, "tags") and audio.tags is not None:
-        tags = audio.tags
-        try:
-            frames = list(tags.values())
-        except (TypeError, AttributeError):
-            frames = [tags[k] for k in tags.keys()] if hasattr(tags, "keys") else []
-        for frame in frames:
-            fn = type(frame).__name__
-            if fn == "TXXX" and getattr(frame, "desc", "").upper() == TRACKFLOW_DESC.upper():
-                if frame.text:
-                    trackflow_id = _safe_str(frame.text[0])
-            elif fn in ("TPE1",):
-                if frame.text:
-                    artist = _safe_str(frame.text[0])
-            elif fn in ("TIT2",):
-                if frame.text:
-                    title = _safe_str(frame.text[0])
-            elif fn in ("TALB",):
-                if frame.text:
-                    album = _safe_str(frame.text[0])
-        if trackflow_id is None and hasattr(tags, "getall"):
-            for fr in tags.getall("TXXX"):
-                if getattr(fr, "desc", "").upper() == TRACKFLOW_DESC.upper() and fr.text:
-                    trackflow_id = _safe_str(fr.text[0])
-                    break
-
-    # Vorbis / FLAC / Opus
-    if hasattr(audio, "get") and callable(audio.get):
-        for key in ("TRACKFLOW_ID", "trackflow_id"):
-            v = audio.get(key)
-            if v:
-                trackflow_id = _safe_str(v[0] if isinstance(v, list) else v)
-                break
-        if not artist:
-            for k in ("ARTIST", "artist"):
-                v = audio.get(k)
-                if v:
-                    artist = _safe_str(v[0] if isinstance(v, list) else v)
-                    break
-        if not title:
-            for k in ("TITLE", "title"):
-                v = audio.get(k)
-                if v:
-                    title = _safe_str(v[0] if isinstance(v, list) else v)
-                    break
-        if not album:
-            for k in ("ALBUM", "album"):
-                v = audio.get(k)
-                if v:
-                    album = _safe_str(v[0] if isinstance(v, list) else v)
-                    break
-
-    # MP4 (iTunes freeform ----:com.apple.iTunes:TRACKFLOW_ID)
-    if hasattr(audio, "tags") and audio.tags is not None and trackflow_id is None:
-        MP4FreeForm = None
-        try:
-            from mutagen.mp4 import MP4FreeForm as _MP4FreeForm
-
-            MP4FreeForm = _MP4FreeForm
-        except Exception as e:
-            _log_import_error("read_tags: mutagen.mp4.MP4FreeForm", e)
-        if MP4FreeForm:
-            ff_key = "----:com.apple.iTunes:TRACKFLOW_ID"
-            raw = audio.tags.get(ff_key)
-            if raw and len(raw) > 0:
-                item = raw[0]
-                if isinstance(item, MP4FreeForm):
-                    try:
-                        data = getattr(item, "data", None) or bytes(item)
-                        trackflow_id = _safe_str(data.decode("utf-8"))
-                    except Exception:
-                        trackflow_id = _safe_str(str(item))
-                else:
-                    trackflow_id = _safe_str(str(item))
-            if trackflow_id is None:
-                for k, v in audio.tags.items():
-                    if "trackflow" in str(k).lower() and v:
-                        trackflow_id = _safe_str(v[0])
+        # ID3 (MP3)
+        if hasattr(audio, "tags") and audio.tags is not None:
+            tags = audio.tags
+            try:
+                frames = list(tags.values())
+            except (TypeError, AttributeError):
+                frames = [tags[k] for k in tags.keys()] if hasattr(tags, "keys") else []
+            for frame in frames:
+                fn = type(frame).__name__
+                if fn == "TXXX" and getattr(frame, "desc", "").upper() == TRACKFLOW_DESC.upper():
+                    if frame.text:
+                        trackflow_id = _safe_str(frame.text[0])
+                elif fn in ("TPE1",):
+                    if frame.text:
+                        artist = _safe_str(frame.text[0])
+                elif fn in ("TIT2",):
+                    if frame.text:
+                        title = _safe_str(frame.text[0])
+                elif fn in ("TALB",):
+                    if frame.text:
+                        album = _safe_str(frame.text[0])
+            if trackflow_id is None and hasattr(tags, "getall"):
+                for fr in tags.getall("TXXX"):
+                    if getattr(fr, "desc", "").upper() == TRACKFLOW_DESC.upper() and fr.text:
+                        trackflow_id = _safe_str(fr.text[0])
                         break
 
-    return {
-        "ok": True,
-        "trackflow_id": trackflow_id,
-        "artist": artist,
-        "title": title,
-        "album": album,
-        "duration_seconds": duration_seconds,
-    }
+        # Vorbis / FLAC / Opus
+        if hasattr(audio, "get") and callable(audio.get):
+            for key in ("TRACKFLOW_ID", "trackflow_id"):
+                v = audio.get(key)
+                if v:
+                    trackflow_id = _safe_str(v[0] if isinstance(v, list) else v)
+                    break
+            if not artist:
+                for k in ("ARTIST", "artist"):
+                    v = audio.get(k)
+                    if v:
+                        artist = _safe_str(v[0] if isinstance(v, list) else v)
+                        break
+            if not title:
+                for k in ("TITLE", "title"):
+                    v = audio.get(k)
+                    if v:
+                        title = _safe_str(v[0] if isinstance(v, list) else v)
+                        break
+            if not album:
+                for k in ("ALBUM", "album"):
+                    v = audio.get(k)
+                    if v:
+                        album = _safe_str(v[0] if isinstance(v, list) else v)
+                        break
+
+        # MP4 (iTunes freeform ----:com.apple.iTunes:TRACKFLOW_ID)
+        if hasattr(audio, "tags") and audio.tags is not None and trackflow_id is None:
+            MP4FreeForm = None
+            try:
+                from mutagen.mp4 import MP4FreeForm as _MP4FreeForm
+
+                MP4FreeForm = _MP4FreeForm
+            except Exception as e:
+                _log_import_error("read_tags: mutagen.mp4.MP4FreeForm", e)
+            if MP4FreeForm:
+                ff_key = "----:com.apple.iTunes:TRACKFLOW_ID"
+                raw = audio.tags.get(ff_key)
+                if raw and len(raw) > 0:
+                    item = raw[0]
+                    if isinstance(item, MP4FreeForm):
+                        try:
+                            data = getattr(item, "data", None) or bytes(item)
+                            trackflow_id = _safe_str(data.decode("utf-8"))
+                        except Exception:
+                            trackflow_id = _safe_str(str(item))
+                    else:
+                        trackflow_id = _safe_str(str(item))
+                if trackflow_id is None:
+                    for k, v in audio.tags.items():
+                        if "trackflow" in str(k).lower() and v:
+                            trackflow_id = _safe_str(v[0])
+                            break
+
+        return {
+            "ok": True,
+            "trackflow_id": trackflow_id,
+            "artist": artist,
+            "title": title,
+            "album": album,
+            "duration_seconds": duration_seconds,
+        }
+    except Exception as e:
+        _log_import_error("read_tags: tag extraction", e)
+        return {
+            "ok": True,
+            "trackflow_id": None,
+            "artist": None,
+            "title": None,
+            "album": None,
+            "duration_seconds": None,
+        }
 
 
 def _flac_vorbis_set(audio, key: str, value: str) -> None:

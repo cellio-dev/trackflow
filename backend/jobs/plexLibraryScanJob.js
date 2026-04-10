@@ -14,7 +14,7 @@ const {
 } = require('../services/plex');
 const { getAvailabilitySettingsSync } = require('../services/libraryAvailability');
 const { getTrackById } = require('../services/deezer');
-const { applyPlexRatingKeyFromPlexMetadata } = require('../services/tracksDb');
+const { applyPlexRatingKeyFromPlexMetadata, loadTracksPresencePool } = require('../services/tracksDb');
 
 function plexDurationToSeconds(item) {
   const ms = Number(item?.duration);
@@ -45,6 +45,11 @@ async function runPlexLibraryScanJob() {
     `[plexLibraryScanJob] loaded ${items.length} Plex track(s) in ${Date.now() - tScan}ms; applying rating keys…`,
   );
 
+  const presencePool = loadTracksPresencePool();
+  console.log(
+    `[plexLibraryScanJob] loaded ${presencePool.length} library row(s) for matching (single load per scan)`,
+  );
+
   /** One Deezer id → metadata per run (dedupes repeated ids, cuts API volume). */
   const deezerCache = new Map();
   async function enrichFromDeezer(trackflowId) {
@@ -66,9 +71,12 @@ async function runPlexLibraryScanJob() {
   }
 
   let matched = 0;
-  const progressEvery = 500;
+  const progressEvery = 100;
   for (let i = 0; i < items.length; i += 1) {
     const item = items[i];
+    if (i === 0) {
+      console.log('[plexLibraryScanJob] rating-key pass started');
+    }
     if ((i + 1) % progressEvery === 0) {
       console.log(
         `[plexLibraryScanJob] progress ${i + 1}/${items.length} tracks processed, ${matched} rating key match(es) so far (${Date.now() - tScan}ms elapsed)`,
@@ -112,7 +120,7 @@ async function runPlexLibraryScanJob() {
       year: item?.year != null ? String(item.year) : null,
       plex_rating_key: item?.ratingKey != null ? String(item.ratingKey) : null,
     };
-    const id = applyPlexRatingKeyFromPlexMetadata(meta, plexDurationToSeconds(item));
+    const id = applyPlexRatingKeyFromPlexMetadata(meta, plexDurationToSeconds(item), presencePool);
     if (id != null) {
       matched += 1;
     }

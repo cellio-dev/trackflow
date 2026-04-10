@@ -450,15 +450,19 @@ function markLibraryFilesMissing(seenRelativePathsUnix) {
 /**
  * Plex metadata sync for playlist mapping only: update `plex_rating_key` on existing file-backed rows.
  * Does not create Plex-only tracks or affect availability.
+ *
+ * @param {object} meta
+ * @param {number|null} plexDurationSec
+ * @param {object[]|undefined} presencePool — from `loadTracksPresencePool()`; if omitted, loads per call (avoid in tight loops).
  */
-function applyPlexRatingKeyFromPlexMetadata(meta, plexDurationSec) {
+function applyPlexRatingKeyFromPlexMetadata(meta, plexDurationSec, presencePool) {
   const flow = meta.trackflow_id != null ? String(meta.trackflow_id).trim() : '';
   const rkRaw = meta.plex_rating_key != null ? String(meta.plex_rating_key).trim() : '';
   const plexRatingKey = rkRaw || null;
   if (!plexRatingKey) {
     return null;
   }
-  const pool = loadPoolStmt.all();
+  const pool = presencePool != null ? presencePool : loadPoolStmt.all();
   let row = flow ? db.prepare(`SELECT * FROM tracks WHERE trackflow_id = ? AND db_exists = 1`).get(flow) : null;
   if (!row) {
     row = findPresentTrackForProbe(

@@ -532,15 +532,13 @@ function streamHandlerAsync(req, res) {
       return;
     }
   } else {
-    if (!req.session || req.session.userId == null) {
+    /* Guest streams: the in-app <audio> tag sends cookies + ?token=. */
+    /* Use host-style queue check so a brief queue race doesn’t 403 mid-stream; guest token still required. */
+    if (!jukeSvc.assertGuestToken(row, token) || !jukeSvc.canHostStreamTrack(jukeboxId, libraryTrackId)) {
       res.status(403).end();
       return;
     }
-    if (!sessionUserHasJukeboxEnabled(req)) {
-      res.status(403).end();
-      return;
-    }
-    if (!jukeSvc.assertGuestToken(row, token) || !jukeSvc.canGuestStreamTrack(jukeboxId, libraryTrackId)) {
+    if (req.session && req.session.userId != null && !sessionUserHasJukeboxEnabled(req)) {
       res.status(403).end();
       return;
     }

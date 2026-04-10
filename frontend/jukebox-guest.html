@@ -2,29 +2,6 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <!-- Cast Web Sender: __onGCastApiAvailable MUST be defined before the SDK script (Google docs). -->
-    <script>
-      (function () {
-        window.__tfCastApiReadyResolved = false;
-        window.__tfCastApiAvailable = undefined;
-        var prev = window.__onGCastApiAvailable;
-        window.__onGCastApiAvailable = function (isAvailable) {
-          try {
-            if (typeof prev === 'function') {
-              prev(isAvailable);
-            }
-          } catch (e) {}
-          window.__tfCastApiAvailable = !!isAvailable;
-          if (!window.__tfCastApiReadyResolved) {
-            window.__tfCastApiReadyResolved = true;
-            try {
-              window.dispatchEvent(new Event('tf-cast-api-ready'));
-            } catch (e2) {}
-          }
-        };
-      })();
-    </script>
-    <script async src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#09090b" />
     <title>Jukebox · Launch</title>
@@ -217,35 +194,6 @@
         align-items: center;
         gap: 8px;
       }
-      /* Primary Cast: native button + CastContext.requestSession() (visible, not inside overflow menu). */
-      .jb-cast-main-btn {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        box-sizing: border-box;
-        min-width: var(--jb-touch-min);
-        min-height: var(--jb-touch-min);
-        border-radius: 12px;
-        border: 1px solid #3f3f46;
-        background: #27272a;
-        color: #e4e4e7;
-        cursor: pointer;
-        padding: 0;
-        margin: 0;
-      }
-      .jb-cast-main-btn:hover {
-        background: #3f3f46;
-      }
-      .jb-cast-main-btn.is-connected {
-        border-color: #a78bfa;
-        color: #a78bfa;
-        box-shadow: 0 0 0 1px rgba(167, 139, 250, 0.35);
-      }
-      .jb-cast-main-btn svg {
-        width: 22px;
-        height: 22px;
-        display: block;
-      }
       .jb-menu-btn {
         min-width: var(--jb-touch-min);
         min-height: var(--jb-touch-min);
@@ -285,20 +233,6 @@
       }
       .jb-menu-panel button:active {
         background: #27272a;
-      }
-      .jb-cast-line {
-        margin: 6px 0 0;
-        font-size: 0.7rem;
-        font-weight: 600;
-        color: #a78bfa;
-        line-height: 1.25;
-        max-width: 100%;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      .jb-cast-line[hidden] {
-        display: none !important;
       }
       .jb-now {
         grid-column: auto;
@@ -1188,20 +1122,6 @@
         <header class="jb-top-region">
           <div class="jb-menu-wrap">
             <div class="jb-top-bar-actions">
-              <button
-                type="button"
-                class="jb-cast-main-btn"
-                id="castMainBtn"
-                hidden
-                aria-label="Chromecast"
-                title="Chromecast"
-              >
-                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                  <path
-                    d="M1 18v3h3c0-1.66-1.34-3-3-3zm0-4v2a9 9 0 0 1 9 9h2c0-6.08-4.93-11-11-11zm0-4v2c7.73 0 14 6.27 14 14h2c0-8.84-7.16-16-16-16zm20-8H3c-1.1 0-2 .9-2 2v3h2V6h16v12h-6v2h6c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"
-                  />
-                </svg>
-              </button>
               <button type="button" class="jb-menu-btn" id="menuBtn" aria-expanded="false" aria-haspopup="true">⋯</button>
             </div>
             <div class="jb-menu-panel" id="menuPanel" role="menu">
@@ -1228,7 +1148,6 @@
                     <div class="jb-cover-meta">
                       <h2 id="npTitle">—</h2>
                       <p id="npArtist">—</p>
-                      <p id="npCastLine" class="jb-cast-line" hidden>Casting to</p>
                     </div>
                   </div>
                 </div>

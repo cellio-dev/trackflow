@@ -12,6 +12,7 @@ const {
   deleteFollowHistoryOlderThanDays,
   deleteFollowHistoryByOutcomeForScope,
 } = require('./followRequestHistory');
+const { addBlockedTrackFromRequestRow } = require('./blockedTracks');
 
 const db = getDb();
 
@@ -99,26 +100,54 @@ async function cancelAllActive(options = {}) {
   return { updated: rows.length };
 }
 
+const listDenyCandidatesByUserStmt = db.prepare(`
+  SELECT id, deezer_id, title, artist, album, user_id, status, duration_seconds, cancelled, processing_phase, created_at, request_type
+  FROM requests
+  WHERE user_id = ?
+    AND (
+      status IN ('pending', 'requested')
+      OR (status = 'failed' AND IFNULL(cancelled, 0) != 1)
+    )
+  ORDER BY id ASC
+`);
+
+const listDenyCandidatesStmt = db.prepare(`
+  SELECT id, deezer_id, title, artist, album, user_id, status, duration_seconds, cancelled, processing_phase, created_at, request_type
+  FROM requests
+  WHERE status IN ('pending', 'requested')
+     OR (status = 'failed' AND IFNULL(cancelled, 0) != 1)
+  ORDER BY id ASC
+`);
+
+const deleteRequestByIdStmt = db.prepare(`
+  DELETE FROM requests
+  WHERE id = ?
+`);
+
+const denyAllTx = db.transaction((rows) => {
+  let updated = 0;
+  for (const row of rows) {
+    addBlockedTrackFromRequestRow(row, 'denied');
+    const r = deleteRequestByIdStmt.run(row.id);
+    if ((r.changes || 0) > 0) {
+      updated += 1;
+    }
+  }
+  return updated;
+});
+
 /**
- * Mark pending + requested (admin “Pending” queue) as denied.
+ * Move pending/requested and needs-attention failed rows to blocked_tracks.
+ * Excludes user-cancelled failures (failed + cancelled=1), which remain history rows.
  * @param {{ userId?: string | null }} options
  */
 function denyAllPending(options = {}) {
   const userId = normalizeUserScope(options.userId);
-  const runStmt = userId
-    ? db.prepare(`
-        UPDATE requests
-        SET status = 'denied', processing_phase = NULL
-        WHERE status IN ('pending', 'requested') AND user_id = ?
-      `)
-    : db.prepare(`
-        UPDATE requests
-        SET status = 'denied', processing_phase = NULL
-        WHERE status IN ('pending', 'requested')
-      `);
-
-  const result = userId ? runStmt.run(userId) : runStmt.run();
-  return { updated: result.changes || 0 };
+  const rows = userId ? listDenyCandidatesByUserStmt.all(userId) : listDenyCandidatesStmt.all();
+  if (rows.length === 0) {
+    return { updated: 0 };
+  }
+  return { updated: denyAllTx(rows) };
 }
 
 /**
@@ -151,7 +180,7 @@ async function retryAllFailed(options = {}) {
 }
 
 /** Terminal / cleared-from-queue statuses only — never pending, requested, or processing. */
-const CLEARABLE_STATUSES = ['completed', 'failed', 'denied', 'available'];
+const CLEARABLE_STATUSES = ['completed', 'failed', 'available'];
 
 /**
  * Delete request rows in completed, failed, denied (and legacy available). Same as Clear on those rows.
@@ -215,11 +244,12 @@ function clearAllHistory(options = {}) {
 
 const TRACK_HISTORY_STATUS_FILTERS = {
   completed: `status = 'completed'`,
-  denied: `status = 'denied'`,
   available: `status = 'available'`,
+  denied: `status = 'denied'`,
   failed_cancelled: `status = 'failed' AND IFNULL(cancelled, 0) = 1`,
   processing_cancelled: `status = 'processing' AND IFNULL(cancelled, 0) = 1`,
   cancelled: `status IN ('failed', 'processing') AND IFNULL(cancelled, 0) = 1`,
+  all: `(status IN ('available', 'denied') OR (status IN ('failed', 'processing') AND IFNULL(cancelled, 0) = 1))`,
 };
 
 /**
@@ -291,6 +321,44 @@ function clearHistoryOlderThanDays(options = {}) {
   };
 }
 
+/**
+ * Retry failed requests older than N days (excluding user-canceled failures).
+ * @param {{ userId?: string | null, older_than_days: number }} options
+ * @returns {Promise<{retried: number}>}
+ */
+async function retryFailedRequestsOlderThanDays(options = {}) {
+  const userId = normalizeUserScope(options.userId);
+  const days = Math.min(3650, Math.max(1, Math.floor(Number(options.older_than_days) || 0)));
+  const mod = `-${days} days`;
+  const listStmt = userId
+    ? db.prepare(`
+        SELECT id
+        FROM requests
+        WHERE user_id = ?
+          AND status = 'failed'
+          AND IFNULL(cancelled, 0) != 1
+          AND datetime(created_at) < datetime('now', ?)
+        ORDER BY id ASC
+      `)
+    : db.prepare(`
+        SELECT id
+        FROM requests
+        WHERE status = 'failed'
+          AND IFNULL(cancelled, 0) != 1
+          AND datetime(created_at) < datetime('now', ?)
+        ORDER BY id ASC
+      `);
+  const rows = userId ? listStmt.all(userId, mod) : listStmt.all(mod);
+  let retried = 0;
+  for (const row of rows) {
+    const result = await approveRequestById(row.id);
+    if (result.ok) {
+      retried += 1;
+    }
+  }
+  return { retried };
+}
+
 module.exports = {
   approveAllPending,
   cancelAllActive,
@@ -302,5 +370,6 @@ module.exports = {
   clearHistoryFollowByOutcome,
   clearHistoryOlderThanDays,
   clearCompletedRequestsOlderThanDays,
+  retryFailedRequestsOlderThanDays,
   TRACK_HISTORY_STATUS_FILTERS,
 };
