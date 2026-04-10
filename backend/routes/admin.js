@@ -45,9 +45,15 @@ const deleteRequestStmt = db.prepare(`
   WHERE id = ?
 `);
 
+const setRequestDeniedStmt = db.prepare(`
+  UPDATE requests
+  SET status = 'denied', cancelled = 0, processing_phase = NULL
+  WHERE id = ?
+`);
+
 const moveRequestToBlocklistTx = db.transaction((requestRow) => {
   addBlockedTrackFromRequestRow(requestRow, 'denied');
-  deleteRequestStmt.run(requestRow.id);
+  setRequestDeniedStmt.run(requestRow.id);
 });
 
 // GET /api/admin

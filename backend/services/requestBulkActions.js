@@ -119,8 +119,9 @@ const listDenyCandidatesStmt = db.prepare(`
   ORDER BY id ASC
 `);
 
-const deleteRequestByIdStmt = db.prepare(`
-  DELETE FROM requests
+const setRequestDeniedStmt = db.prepare(`
+  UPDATE requests
+  SET status = 'denied', cancelled = 0, processing_phase = NULL
   WHERE id = ?
 `);
 
@@ -128,7 +129,7 @@ const denyAllTx = db.transaction((rows) => {
   let updated = 0;
   for (const row of rows) {
     addBlockedTrackFromRequestRow(row, 'denied');
-    const r = deleteRequestByIdStmt.run(row.id);
+    const r = setRequestDeniedStmt.run(row.id);
     if ((r.changes || 0) > 0) {
       updated += 1;
     }
@@ -137,8 +138,8 @@ const denyAllTx = db.transaction((rows) => {
 });
 
 /**
- * Move pending/requested and needs-attention failed rows to blocked_tracks.
- * Excludes user-cancelled failures (failed + cancelled=1), which remain history rows.
+ * Deny pending/requested and needs-attention failed rows: add blocked_tracks entry and set status = denied.
+ * Excludes user-cancelled failures (failed + cancelled=1).
  * @param {{ userId?: string | null }} options
  */
 function denyAllPending(options = {}) {
@@ -179,8 +180,8 @@ async function retryAllFailed(options = {}) {
   return { updated };
 }
 
-/** Terminal / cleared-from-queue statuses only — never pending, requested, or processing. */
-const CLEARABLE_STATUSES = ['completed', 'failed', 'available'];
+/** Terminal / cleared-from-queue statuses only — never pending, requested, or active processing. */
+const CLEARABLE_STATUSES = ['completed', 'failed', 'available', 'denied'];
 
 /**
  * Delete request rows in completed, failed, denied (and legacy available). Same as Clear on those rows.
@@ -243,13 +244,13 @@ function clearAllHistory(options = {}) {
 }
 
 const TRACK_HISTORY_STATUS_FILTERS = {
-  completed: `status = 'completed'`,
-  available: `status = 'available'`,
+  /** Finished / error rows only (exclude pending, requested, active processing). */
+  all: `(status IN ('completed', 'available', 'denied', 'failed') OR (status = 'processing' AND IFNULL(cancelled, 0) = 1))`,
+  /** Library-complete outcomes (includes legacy status = 'available'). */
+  completed: `status IN ('completed', 'available')`,
+  /** Failed downloads and user-cancelled attempts (failed + cancelled, or processing + cancelled). */
+  failed: `(status = 'failed' OR (status = 'processing' AND IFNULL(cancelled, 0) = 1))`,
   denied: `status = 'denied'`,
-  failed_cancelled: `status = 'failed' AND IFNULL(cancelled, 0) = 1`,
-  processing_cancelled: `status = 'processing' AND IFNULL(cancelled, 0) = 1`,
-  cancelled: `status IN ('failed', 'processing') AND IFNULL(cancelled, 0) = 1`,
-  all: `(status IN ('available', 'denied') OR (status IN ('failed', 'processing') AND IFNULL(cancelled, 0) = 1))`,
 };
 
 /**
