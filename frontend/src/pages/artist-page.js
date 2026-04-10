@@ -58,17 +58,20 @@ function renderFollowButton() {
   if (!followButton) {
     return;
   }
-  followButton.classList.remove('is-pending-follow', 'is-active-follow');
+  followButton.classList.remove('is-pending-follow', 'is-active-follow', 'is-denied-follow');
   if (!followedRow) {
     followButton.textContent = 'Follow';
   } else if (followedRow.follow_status === 'pending') {
     followButton.textContent = 'Pending approval';
     followButton.classList.add('is-pending-follow');
+  } else if (followedRow.follow_status === 'denied') {
+    followButton.textContent = 'Follow denied';
+    followButton.classList.add('is-denied-follow');
   } else {
     followButton.textContent = 'Unfollow';
     followButton.classList.add('is-active-follow');
   }
-  followButton.disabled = !currentArtist;
+  followButton.disabled = !currentArtist || followedRow?.follow_status === 'denied';
 }
 
 async function loadFollowState() {
@@ -97,6 +100,9 @@ async function loadFollowState() {
 
 async function toggleFollow() {
   if (!followButton || !currentArtist) {
+    return;
+  }
+  if (followedRow?.follow_status === 'denied') {
     return;
   }
   followButton.disabled = true;

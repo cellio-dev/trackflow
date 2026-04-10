@@ -9,6 +9,8 @@ const ENTITY_FOLLOW_SVG_PENDING = `<svg class="search-entity-card__follow-svg" v
 
 const ENTITY_FOLLOW_SVG_FOLLOWING = `<svg class="search-entity-card__follow-svg" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>`;
 
+const ENTITY_FOLLOW_SVG_DENIED = `<svg class="search-entity-card__follow-svg" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>`;
+
 /**
  * @param {Map<string, string>} optimisticRequestStatusById
  */
@@ -148,6 +150,10 @@ export function createDiscoverFeedCore(optimisticRequestStatusById) {
       slot.innerHTML = ENTITY_FOLLOW_SVG_FOLLOWING;
       return;
     }
+    if (st === 'denied') {
+      slot.innerHTML = ENTITY_FOLLOW_SVG_DENIED;
+      return;
+    }
     slot.innerHTML = '';
   }
 
@@ -176,6 +182,12 @@ export function createDiscoverFeedCore(optimisticRequestStatusById) {
       syncDiscoverEntityFollowIcon(btn);
       return;
     }
+    if (st === 'denied') {
+      labelEl.textContent = 'Denied';
+      setDiscoverFollowAria(btn);
+      syncDiscoverEntityFollowIcon(btn);
+      return;
+    }
     labelEl.textContent = 'Following';
     setDiscoverFollowAria(btn);
     syncDiscoverEntityFollowIcon(btn);
@@ -185,20 +197,27 @@ export function createDiscoverFeedCore(optimisticRequestStatusById) {
     btn.dataset.followRowId = row ? String(row.id) : '';
     btn.dataset.followStatus = row ? String(row.follow_status || '') : '';
     if (!row) {
-      btn.classList.remove('is-pending', 'is-following');
+      btn.classList.remove('is-pending', 'is-following', 'is-denied');
       btn.disabled = false;
       restoreDiscoverFollowButtonLabel(btn);
       return;
     }
     if (row.follow_status === 'pending') {
       btn.classList.add('is-pending');
-      btn.classList.remove('is-following');
+      btn.classList.remove('is-following', 'is-denied');
       btn.disabled = false;
       restoreDiscoverFollowButtonLabel(btn);
       return;
     }
+    if (row.follow_status === 'denied') {
+      btn.classList.add('is-denied');
+      btn.classList.remove('is-pending', 'is-following');
+      btn.disabled = true;
+      restoreDiscoverFollowButtonLabel(btn);
+      return;
+    }
     btn.classList.add('is-following');
-    btn.classList.remove('is-pending');
+    btn.classList.remove('is-pending', 'is-denied');
     btn.disabled = false;
     restoreDiscoverFollowButtonLabel(btn);
   }
@@ -268,6 +287,9 @@ export function createDiscoverFeedCore(optimisticRequestStatusById) {
 
     const rowId = btn.dataset.followRowId ? Number(btn.dataset.followRowId) : 0;
     const status = btn.dataset.followStatus || '';
+    if (status === 'denied') {
+      return;
+    }
     btn.disabled = true;
 
     try {
@@ -291,6 +313,10 @@ export function createDiscoverFeedCore(optimisticRequestStatusById) {
           body: JSON.stringify(body),
         });
         if (!res.ok) {
+          if (res.status === 403) {
+            await refreshEntityFollowUi();
+            return;
+          }
           throw new Error('Follow failed');
         }
       }
@@ -298,7 +324,7 @@ export function createDiscoverFeedCore(optimisticRequestStatusById) {
     } catch (err) {
       console.error(err);
     } finally {
-      btn.disabled = false;
+      btn.disabled = btn.dataset.followStatus === 'denied';
     }
   }
 

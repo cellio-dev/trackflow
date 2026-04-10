@@ -35,6 +35,7 @@ function buildArtistGridRow(row, ctx) {
 
   const href = `/artist.html?id=${encodeURIComponent(String(row.artist_id))}`;
   const isPending = row.follow_status === 'pending';
+  const isDenied = row.follow_status === 'denied';
 
   const card = document.createElement('div');
   card.className = 'search-entity-card';
@@ -94,20 +95,30 @@ function buildArtistGridRow(row, ctx) {
 
   const followStrip = document.createElement('div');
   followStrip.className = 'search-entity-card__follow-strip';
-  if (!isPending) {
+  if (!isPending && !isDenied) {
+    followStrip.classList.add('followed-card__follow-strip--reveal');
+  }
+  if (isPending || isDenied) {
     followStrip.classList.add('followed-card__follow-strip--reveal');
   }
 
   const followBtn = document.createElement('button');
   followBtn.type = 'button';
-  followBtn.className = `search-entity-card__follow-btn${isPending ? ' is-pending' : ' is-following'}`;
-  followBtn.textContent = isPending ? 'Pending…' : 'Following';
-  wireFollowedGridUnfollowHover(followBtn, isPending);
-  followBtn.addEventListener('click', async (e) => {
-    e.stopPropagation();
-    e.preventDefault();
-    await ctx.deleteFollowedRow(row, li, followBtn);
-  });
+  if (isDenied) {
+    followBtn.className = 'search-entity-card__follow-btn is-denied';
+    followBtn.textContent = 'Denied';
+    followBtn.disabled = true;
+    followBtn.setAttribute('aria-label', 'Follow request denied');
+  } else {
+    followBtn.className = `search-entity-card__follow-btn${isPending ? ' is-pending' : ' is-following'}`;
+    followBtn.textContent = isPending ? 'Pending…' : 'Following';
+    wireFollowedGridUnfollowHover(followBtn, isPending);
+    followBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      await ctx.deleteFollowedRow(row, li, followBtn);
+    });
+  }
   followStrip.appendChild(followBtn);
   card.appendChild(followStrip);
 
@@ -121,6 +132,7 @@ function buildPlaylistGridRow(row, ctx) {
 
   const href = `/playlist.html?id=${encodeURIComponent(String(row.playlist_id))}`;
   const isPending = row.follow_status === 'pending';
+  const isDenied = row.follow_status === 'denied';
 
   const card = document.createElement('div');
   card.className = 'search-entity-card search-entity-card--playlist';
@@ -180,20 +192,30 @@ function buildPlaylistGridRow(row, ctx) {
 
   const followStrip = document.createElement('div');
   followStrip.className = 'search-entity-card__follow-strip';
-  if (!isPending) {
+  if (!isPending && !isDenied) {
+    followStrip.classList.add('followed-card__follow-strip--reveal');
+  }
+  if (isPending || isDenied) {
     followStrip.classList.add('followed-card__follow-strip--reveal');
   }
 
   const followBtn = document.createElement('button');
   followBtn.type = 'button';
-  followBtn.className = `search-entity-card__follow-btn${isPending ? ' is-pending' : ' is-following'}`;
-  followBtn.textContent = isPending ? 'Pending…' : 'Following';
-  wireFollowedGridUnfollowHover(followBtn, isPending);
-  followBtn.addEventListener('click', async (e) => {
-    e.stopPropagation();
-    e.preventDefault();
-    await ctx.deleteFollowedRow(row, li, followBtn);
-  });
+  if (isDenied) {
+    followBtn.className = 'search-entity-card__follow-btn is-denied';
+    followBtn.textContent = 'Denied';
+    followBtn.disabled = true;
+    followBtn.setAttribute('aria-label', 'Follow request denied');
+  } else {
+    followBtn.className = `search-entity-card__follow-btn${isPending ? ' is-pending' : ' is-following'}`;
+    followBtn.textContent = isPending ? 'Pending…' : 'Following';
+    wireFollowedGridUnfollowHover(followBtn, isPending);
+    followBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      await ctx.deleteFollowedRow(row, li, followBtn);
+    });
+  }
   if (playlistRowShowsPlexSyncBadge(row)) {
     const plexSlot = document.createElement('span');
     plexSlot.className = 'search-entity-card__plex-sync-slot';
@@ -220,6 +242,7 @@ function buildArtistListRow(row, ctx) {
 
   const href = `/artist.html?id=${encodeURIComponent(String(row.artist_id))}`;
   const isPending = row.follow_status === 'pending';
+  const isDenied = row.follow_status === 'denied';
 
   const thumb = document.createElement('img');
   thumb.className = 'followed-list-item__thumb';
@@ -237,7 +260,9 @@ function buildArtistListRow(row, ctx) {
   const meta = document.createElement('div');
   meta.className = 'followed-list-item__meta';
   const parts = [];
-  if (isPending) {
+  if (isDenied) {
+    parts.push('Denied');
+  } else if (isPending) {
     parts.push('Pending approval');
   }
   if (ctx.showOwnerBadge() && row.owner_username) {
@@ -248,18 +273,20 @@ function buildArtistListRow(row, ctx) {
   main.appendChild(titleLink);
   main.appendChild(meta);
 
-  const unfollowBtn = document.createElement('button');
-  unfollowBtn.type = 'button';
-  unfollowBtn.className = 'followed-list-unfollow';
-  unfollowBtn.setAttribute('aria-label', `Unfollow ${row.name || 'artist'}`);
-  unfollowBtn.innerHTML = UNFOLLOW_ICON_SVG;
-  unfollowBtn.addEventListener('click', async () => {
-    await ctx.deleteFollowedRow(row, li, unfollowBtn);
-  });
-
   li.appendChild(thumb);
   li.appendChild(main);
-  li.appendChild(unfollowBtn);
+
+  if (!isDenied) {
+    const unfollowBtn = document.createElement('button');
+    unfollowBtn.type = 'button';
+    unfollowBtn.className = 'followed-list-unfollow';
+    unfollowBtn.setAttribute('aria-label', `Unfollow ${row.name || 'artist'}`);
+    unfollowBtn.innerHTML = UNFOLLOW_ICON_SVG;
+    unfollowBtn.addEventListener('click', async () => {
+      await ctx.deleteFollowedRow(row, li, unfollowBtn);
+    });
+    li.appendChild(unfollowBtn);
+  }
   return li;
 }
 
@@ -269,6 +296,7 @@ function buildPlaylistListRow(row, ctx) {
 
   const href = `/playlist.html?id=${encodeURIComponent(String(row.playlist_id))}`;
   const isPending = row.follow_status === 'pending';
+  const isDenied = row.follow_status === 'denied';
 
   const thumb = document.createElement('img');
   thumb.className = 'followed-list-item__thumb';
@@ -286,7 +314,9 @@ function buildPlaylistListRow(row, ctx) {
   const meta = document.createElement('div');
   meta.className = 'followed-list-item__meta';
   const parts = [];
-  if (isPending) {
+  if (isDenied) {
+    parts.push('Denied');
+  } else if (isPending) {
     parts.push('Pending approval');
   }
   if (ctx.showOwnerBadge() && row.owner_username) {
@@ -297,15 +327,6 @@ function buildPlaylistListRow(row, ctx) {
   main.appendChild(titleLink);
   main.appendChild(meta);
 
-  const unfollowBtn = document.createElement('button');
-  unfollowBtn.type = 'button';
-  unfollowBtn.className = 'followed-list-unfollow';
-  unfollowBtn.setAttribute('aria-label', `Unfollow ${row.title || 'playlist'}`);
-  unfollowBtn.innerHTML = UNFOLLOW_ICON_SVG;
-  unfollowBtn.addEventListener('click', async () => {
-    await ctx.deleteFollowedRow(row, li, unfollowBtn);
-  });
-
   const actions = document.createElement('div');
   actions.className = 'followed-list-item__actions';
   if (playlistRowShowsPlexSyncBadge(row)) {
@@ -315,7 +336,17 @@ function buildPlaylistListRow(row, ctx) {
     plexSlot.innerHTML = PLEX_SYNC_SVG_HTML;
     actions.appendChild(plexSlot);
   }
-  actions.appendChild(unfollowBtn);
+  if (!isDenied) {
+    const unfollowBtn = document.createElement('button');
+    unfollowBtn.type = 'button';
+    unfollowBtn.className = 'followed-list-unfollow';
+    unfollowBtn.setAttribute('aria-label', `Unfollow ${row.title || 'playlist'}`);
+    unfollowBtn.innerHTML = UNFOLLOW_ICON_SVG;
+    unfollowBtn.addEventListener('click', async () => {
+      await ctx.deleteFollowedRow(row, li, unfollowBtn);
+    });
+    actions.appendChild(unfollowBtn);
+  }
 
   li.appendChild(thumb);
   li.appendChild(main);

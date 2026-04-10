@@ -12,11 +12,14 @@ const requestOverviewStmt = db.prepare(`
   SELECT
     SUM(CASE WHEN status IN ('pending', 'requested') THEN 1 ELSE 0 END) AS requested,
     SUM(CASE WHEN status = 'processing' AND IFNULL(cancelled, 0) = 0 THEN 1 ELSE 0 END) AS processing,
-    SUM(CASE WHEN status = 'failed' AND IFNULL(cancelled, 0) = 0 THEN 1 ELSE 0 END) AS needs_attention,
-    SUM(CASE WHEN status = 'denied' THEN 1 ELSE 0 END) AS denied,
     SUM(
-      CASE WHEN IFNULL(cancelled, 0) = 1 AND status IN ('failed', 'processing') THEN 1 ELSE 0 END
-    ) AS canceled,
+      CASE
+        WHEN status = 'failed' AND IFNULL(cancelled, 0) = 0 THEN 1
+        WHEN IFNULL(cancelled, 0) = 1 AND status IN ('failed', 'processing') THEN 1
+        ELSE 0
+      END
+    ) AS needs_attention,
+    SUM(CASE WHEN status = 'denied' THEN 1 ELSE 0 END) AS denied,
     SUM(CASE WHEN status IN ('completed', 'available') THEN 1 ELSE 0 END) AS completed,
     COUNT(*) AS total
   FROM requests
@@ -235,7 +238,6 @@ function buildDigestHtml({
     ['Processing', overview.processing || 0],
     ['Needs Attention', overview.needs_attention || 0],
     ['Denied', overview.denied || 0],
-    ['Canceled', overview.canceled || 0],
     ['Completed', overview.completed || 0],
     ['Total Requests', overview.total || 0],
   ];

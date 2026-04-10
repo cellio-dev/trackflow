@@ -618,6 +618,20 @@ body.app-layout {
   cursor: not-allowed;
 }
 
+.app-main #followButton.is-denied-follow {
+  border-color: rgba(248, 113, 113, 0.45);
+  color: #fecaca;
+  opacity: 1;
+  cursor: not-allowed;
+}
+
+.app-main #followButton.is-denied-follow:hover,
+.app-main #followButton.is-denied-follow:focus-visible {
+  background: #27272a;
+  border-color: rgba(248, 113, 113, 0.45);
+  color: #fecaca;
+}
+
 .app-main #autoAcquireButton {
   background: #27272a;
   border: 1px solid #3f3f46;

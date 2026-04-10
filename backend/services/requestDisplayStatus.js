@@ -43,7 +43,7 @@ function computeDisplayFields(row) {
   }
 
   if (status === 'failed' && cancelled) {
-    return { displayStatus: 'Canceled', processingStatus: 'Canceled' };
+    return { displayStatus: 'Needs Attention', processingStatus: 'Canceled' };
   }
 
   if (status === 'failed' && !cancelled) {
@@ -51,7 +51,7 @@ function computeDisplayFields(row) {
   }
 
   if (status === 'processing' && cancelled) {
-    return { displayStatus: 'Canceled', processingStatus: 'Canceled' };
+    return { displayStatus: 'Needs Attention', processingStatus: 'Canceled' };
   }
 
   if (status === 'processing' && !cancelled) {

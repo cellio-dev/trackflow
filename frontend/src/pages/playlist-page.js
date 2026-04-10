@@ -158,17 +158,20 @@ function renderFollowButton() {
   if (!followButton) {
     return;
   }
-  followButton.classList.remove('is-pending-follow', 'is-active-follow');
+  followButton.classList.remove('is-pending-follow', 'is-active-follow', 'is-denied-follow');
   if (!followedRow) {
     followButton.textContent = 'Follow';
   } else if (followedRow.follow_status === 'pending') {
     followButton.textContent = 'Pending approval';
     followButton.classList.add('is-pending-follow');
+  } else if (followedRow.follow_status === 'denied') {
+    followButton.textContent = 'Follow denied';
+    followButton.classList.add('is-denied-follow');
   } else {
     followButton.textContent = 'Unfollow';
     followButton.classList.add('is-active-follow');
   }
-  followButton.disabled = !currentPlaylist;
+  followButton.disabled = !currentPlaylist || followedRow?.follow_status === 'denied';
   updatePlexSyncToggle();
 }
 
@@ -237,6 +240,9 @@ async function togglePlexSync() {
 async function toggleFollow() {
   const followButton = document.getElementById('followButton');
   if (!followButton || !currentPlaylist) {
+    return;
+  }
+  if (followedRow?.follow_status === 'denied') {
     return;
   }
 

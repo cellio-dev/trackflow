@@ -239,6 +239,17 @@ const approveArtistFollowStmt = db.prepare(`
 const deletePlaylistFollowStmt = db.prepare(`DELETE FROM followed_playlists WHERE id = ? AND follow_status = 'pending'`);
 const deleteArtistFollowStmt = db.prepare(`DELETE FROM followed_artists WHERE id = ? AND follow_status = 'pending'`);
 
+const denyPlaylistFollowStmt = db.prepare(`
+  UPDATE followed_playlists
+  SET follow_status = 'denied', sync_auto_approve = 0
+  WHERE id = ? AND follow_status = 'pending'
+`);
+const denyArtistFollowStmt = db.prepare(`
+  UPDATE followed_artists
+  SET follow_status = 'denied', sync_auto_approve = 0
+  WHERE id = ? AND follow_status = 'pending'
+`);
+
 const getPendingPlaylistFollowByIdStmt = db.prepare(`
   SELECT id, playlist_id, title, picture, user_id, follow_status, sync_auto_approve, created_at
   FROM followed_playlists
@@ -270,7 +281,7 @@ const rejectPlaylistTx = db.transaction((rowId) => {
     throw err;
   }
   recordFollowResolution(pending, 'playlist', 'denied');
-  deletePlaylistFollowStmt.run(rowId);
+  denyPlaylistFollowStmt.run(rowId);
 });
 
 const approveArtistTx = db.transaction((rowId) => {
@@ -292,7 +303,7 @@ const rejectArtistTx = db.transaction((rowId) => {
     throw err;
   }
   recordFollowResolution(pending, 'artist', 'denied');
-  deleteArtistFollowStmt.run(rowId);
+  denyArtistFollowStmt.run(rowId);
 });
 
 // GET /api/admin/pending-follows
@@ -437,11 +448,11 @@ router.post('/follows/reject-all', (req, res) => {
     const runAll = db.transaction(() => {
       for (const p of playlists) {
         recordFollowResolution(p, 'playlist', 'denied');
-        deletePlaylistFollowStmt.run(p.id);
+        denyPlaylistFollowStmt.run(p.id);
       }
       for (const a of artists) {
         recordFollowResolution(a, 'artist', 'denied');
-        deleteArtistFollowStmt.run(a.id);
+        denyArtistFollowStmt.run(a.id);
       }
     });
     runAll();

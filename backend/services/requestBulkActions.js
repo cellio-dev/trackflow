@@ -250,6 +250,8 @@ const TRACK_HISTORY_STATUS_FILTERS = {
   completed: `status IN ('completed', 'available')`,
   /** Failed downloads and user-cancelled attempts (failed + cancelled, or processing + cancelled). */
   failed: `(status = 'failed' OR (status = 'processing' AND IFNULL(cancelled, 0) = 1))`,
+  /** User-cancelled only (failed + cancelled, or processing + cancelled). */
+  canceled: `((status = 'failed' AND IFNULL(cancelled, 0) = 1) OR (status = 'processing' AND IFNULL(cancelled, 0) = 1))`,
   denied: `status = 'denied'`,
 };
 

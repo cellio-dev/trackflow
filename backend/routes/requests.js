@@ -413,8 +413,7 @@ router.delete('/:id', (req, res) => {
       return res.status(403).json({ error: 'Forbidden' });
     }
     if (!isAdmin) {
-      const st = String(existing.status || '');
-      if (st !== 'pending' && st !== 'requested') {
+      if (!userMayDeleteRequestViaUserApi(existing)) {
         return res.status(403).json({ error: 'Forbidden' });
       }
     } else if (!userMayDeleteRequestViaUserApi(existing)) {

@@ -25,7 +25,7 @@ const listFollowedAllStmt = db.prepare(`
          u.username AS owner_username
   FROM followed_artists fa
   LEFT JOIN users u ON CAST(fa.user_id AS INTEGER) = u.id
-  WHERE fa.user_id = ? AND fa.follow_status IN ('active', 'pending')
+  WHERE fa.user_id = ? AND fa.follow_status IN ('active', 'pending', 'denied')
   ORDER BY fa.id DESC
 `);
 
@@ -43,7 +43,7 @@ const listFollowedAllUsersAllStmt = db.prepare(`
          u.username AS owner_username
   FROM followed_artists fa
   LEFT JOIN users u ON CAST(fa.user_id AS INTEGER) = u.id
-  WHERE fa.follow_status IN ('active', 'pending')
+  WHERE fa.follow_status IN ('active', 'pending', 'denied')
   ORDER BY fa.user_id ASC, fa.id DESC
 `);
 
@@ -151,6 +151,9 @@ router.post('/follow', (req, res) => {
   try {
     const existing = getFollowedByUserAndArtistStmt.get(userId, artistId);
     if (existing) {
+      if (String(existing.follow_status || '') === 'denied') {
+        return res.status(403).json({ error: 'Follow request was denied for this artist' });
+      }
       return res.json(existing);
     }
 
@@ -198,6 +201,10 @@ router.delete('/follow/:id', (req, res) => {
 
     if (existing.user_id !== userId) {
       return res.status(404).json({ error: 'Followed artist not found' });
+    }
+
+    if (String(existing.follow_status || '') === 'denied') {
+      return res.status(403).json({ error: 'Denied follow requests cannot be removed; contact an admin if needed' });
     }
 
     deleteFollowedStmt.run(followedId, userId);

@@ -273,7 +273,7 @@
 
 /* Fine pointer: no empty bordered square; icon-only until card hover; in-flow text avoids card clip. */
 @media (hover: hover) {
-  .search-entity-card__follow-btn:not(.is-pending):not(.is-following) {
+  .search-entity-card__follow-btn:not(.is-pending):not(.is-following):not(.is-denied) {
     border-color: transparent;
     background: transparent;
     padding: 4px 6px;
@@ -283,7 +283,8 @@
   }
 
   .search-entity-card__follow-btn.is-pending,
-  .search-entity-card__follow-btn.is-following {
+  .search-entity-card__follow-btn.is-following,
+  .search-entity-card__follow-btn.is-denied {
     border-color: transparent;
     background: transparent;
     padding: 2px 4px;
@@ -292,6 +293,11 @@
 
   .search-entity-card__follow-btn.is-pending {
     color: #fef9c3;
+  }
+
+  .search-entity-card__follow-btn.is-denied {
+    color: #fecaca;
+    cursor: not-allowed;
   }
 
   .search-entity-card__follow-btn.is-following {
@@ -305,9 +311,9 @@
     pointer-events: none;
   }
 
-  .search-entity-card:hover .search-entity-card__follow-btn:not(.is-pending):not(.is-following),
-  .search-entity-card:focus-within .search-entity-card__follow-btn:not(.is-pending):not(.is-following),
-  .search-entity-card__follow-btn:not(.is-pending):not(.is-following):focus-visible {
+  .search-entity-card:hover .search-entity-card__follow-btn:not(.is-pending):not(.is-following):not(.is-denied),
+  .search-entity-card:focus-within .search-entity-card__follow-btn:not(.is-pending):not(.is-following):not(.is-denied),
+  .search-entity-card__follow-btn:not(.is-pending):not(.is-following):not(.is-denied):focus-visible {
     opacity: 1;
     pointer-events: auto;
     border: 1px solid rgba(255, 255, 255, 0.22);
@@ -316,9 +322,9 @@
     padding: 5px 10px;
   }
 
-  .search-entity-card:hover .search-entity-card__follow-btn:not(.is-pending):not(.is-following) .search-entity-card__follow-label,
-  .search-entity-card:focus-within .search-entity-card__follow-btn:not(.is-pending):not(.is-following) .search-entity-card__follow-label,
-  .search-entity-card__follow-btn:not(.is-pending):not(.is-following):focus-visible .search-entity-card__follow-label {
+  .search-entity-card:hover .search-entity-card__follow-btn:not(.is-pending):not(.is-following):not(.is-denied) .search-entity-card__follow-label,
+  .search-entity-card:focus-within .search-entity-card__follow-btn:not(.is-pending):not(.is-following):not(.is-denied) .search-entity-card__follow-label,
+  .search-entity-card__follow-btn:not(.is-pending):not(.is-following):not(.is-denied):focus-visible .search-entity-card__follow-label {
     max-width: 140px;
     opacity: 1;
     pointer-events: auto;
@@ -326,10 +332,13 @@
 
   .search-entity-card:hover .search-entity-card__follow-btn.is-pending,
   .search-entity-card:hover .search-entity-card__follow-btn.is-following,
+  .search-entity-card:hover .search-entity-card__follow-btn.is-denied,
   .search-entity-card:focus-within .search-entity-card__follow-btn.is-pending,
   .search-entity-card:focus-within .search-entity-card__follow-btn.is-following,
+  .search-entity-card:focus-within .search-entity-card__follow-btn.is-denied,
   .search-entity-card__follow-btn.is-pending:focus-visible,
-  .search-entity-card__follow-btn.is-following:focus-visible {
+  .search-entity-card__follow-btn.is-following:focus-visible,
+  .search-entity-card__follow-btn.is-denied:focus-visible {
     min-height: 32px;
     padding: 5px 10px;
   }
@@ -342,6 +351,14 @@
     color: #fef9c3;
   }
 
+  .search-entity-card:hover .search-entity-card__follow-btn.is-denied,
+  .search-entity-card:focus-within .search-entity-card__follow-btn.is-denied,
+  .search-entity-card__follow-btn.is-denied:focus-visible {
+    border-color: rgba(248, 113, 113, 0.5);
+    background: rgba(127, 29, 29, 0.45);
+    color: #fecaca;
+  }
+
   .search-entity-card:hover .search-entity-card__follow-btn.is-following,
   .search-entity-card:focus-within .search-entity-card__follow-btn.is-following,
   .search-entity-card__follow-btn.is-following:focus-visible {
@@ -352,10 +369,13 @@
 
   .search-entity-card:hover .search-entity-card__follow-btn.is-pending .search-entity-card__follow-label,
   .search-entity-card:hover .search-entity-card__follow-btn.is-following .search-entity-card__follow-label,
+  .search-entity-card:hover .search-entity-card__follow-btn.is-denied .search-entity-card__follow-label,
   .search-entity-card:focus-within .search-entity-card__follow-btn.is-pending .search-entity-card__follow-label,
   .search-entity-card:focus-within .search-entity-card__follow-btn.is-following .search-entity-card__follow-label,
+  .search-entity-card:focus-within .search-entity-card__follow-btn.is-denied .search-entity-card__follow-label,
   .search-entity-card__follow-btn.is-pending:focus-visible .search-entity-card__follow-label,
-  .search-entity-card__follow-btn.is-following:focus-visible .search-entity-card__follow-label {
+  .search-entity-card__follow-btn.is-following:focus-visible .search-entity-card__follow-label,
+  .search-entity-card__follow-btn.is-denied:focus-visible .search-entity-card__follow-label {
     max-width: 140px;
     opacity: 1;
     pointer-events: auto;
@@ -364,7 +384,8 @@
   .search-entity-card:hover .search-entity-card__follow-btn .search-entity-card__follow-icon-slot:not(:empty),
   .search-entity-card:focus-within .search-entity-card__follow-btn .search-entity-card__follow-icon-slot:not(:empty),
   .search-entity-card__follow-btn.is-pending:focus-visible .search-entity-card__follow-icon-slot:not(:empty),
-  .search-entity-card__follow-btn.is-following:focus-visible .search-entity-card__follow-icon-slot:not(:empty) {
+  .search-entity-card__follow-btn.is-following:focus-visible .search-entity-card__follow-icon-slot:not(:empty),
+  .search-entity-card__follow-btn.is-denied:focus-visible .search-entity-card__follow-icon-slot:not(:empty) {
     opacity: 0;
     width: 0;
     min-width: 0;
@@ -391,9 +412,15 @@
     background: rgba(113, 63, 18, 0.45);
     color: #fef9c3;
   }
+
+  .search-entity-card__follow-btn.is-denied {
+    border-color: rgba(248, 113, 113, 0.5);
+    background: rgba(127, 29, 29, 0.45);
+    color: #fecaca;
+  }
 }
 
-.search-entity-card__follow-btn:not(.is-pending):not(.is-following):hover:not(:disabled) {
+.search-entity-card__follow-btn:not(.is-pending):not(.is-following):not(.is-denied):hover:not(:disabled) {
   background: rgba(39, 39, 42, 0.95);
   border-color: rgba(255, 255, 255, 0.35);
 }

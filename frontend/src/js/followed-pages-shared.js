@@ -494,6 +494,9 @@ export async function mountFollowingPage(options) {
   }
 
   async function deleteFollowedRow(row, li, controlEl) {
+    if (String(row?.follow_status || '') === 'denied') {
+      return;
+    }
     if (controlEl) {
       controlEl.disabled = true;
     }

@@ -33,7 +33,7 @@ const listFollowedActiveStmt = db.prepare(`
 
 const listFollowedAllStmt = db.prepare(`
   ${listFollowedSelect}
-  WHERE fp.user_id = ? AND fp.follow_status IN ('active', 'pending')
+  WHERE fp.user_id = ? AND fp.follow_status IN ('active', 'pending', 'denied')
   ORDER BY fp.id DESC
 `);
 
@@ -45,7 +45,7 @@ const listFollowedAllUsersActiveStmt = db.prepare(`
 
 const listFollowedAllUsersAllStmt = db.prepare(`
   ${listFollowedSelect}
-  WHERE fp.follow_status IN ('active', 'pending')
+  WHERE fp.follow_status IN ('active', 'pending', 'denied')
   ORDER BY fp.user_id ASC, fp.id DESC
 `);
 
@@ -183,6 +183,9 @@ router.post('/follow', (req, res) => {
   try {
     const existing = getFollowedByUserAndPlaylistStmt.get(userId, playlistId);
     if (existing) {
+      if (String(existing.follow_status || '') === 'denied') {
+        return res.status(403).json({ error: 'Follow request was denied for this playlist' });
+      }
       return res.json(serializeFollowedRow(existing));
     }
 
@@ -331,6 +334,10 @@ router.delete('/follow/:id', async (req, res) => {
 
     if (existing.user_id !== userId) {
       return res.status(404).json({ error: 'Followed playlist not found' });
+    }
+
+    if (String(existing.follow_status || '') === 'denied') {
+      return res.status(403).json({ error: 'Denied follow requests cannot be removed; contact an admin if needed' });
     }
 
     await teardownPlexSyncForFollowedPlaylist(existing, token);

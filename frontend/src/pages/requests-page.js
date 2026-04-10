@@ -224,11 +224,16 @@ function normalizeTrackFilterToken(row) {
   const st = String(row.status || '').toLowerCase();
   const cancelled = Number(row.cancelled) === 1;
   if (st === 'pending' || st === 'requested') return 'pending';
-  if (st === 'processing' && cancelled) return 'cancelled';
+  if (st === 'processing' && cancelled) return 'needs_attention';
   if (st === 'processing') return 'processing';
   if (display === 'available' || st === 'available' || st === 'completed') return 'available';
-  if (display === 'needs attention' || (st === 'failed' && !cancelled)) return 'needs_attention';
-  if (display === 'cancelled' || (st === 'failed' && cancelled)) return 'cancelled';
+  if (
+    display === 'needs attention' ||
+    (st === 'failed' && cancelled) ||
+    (st === 'failed' && !cancelled)
+  ) {
+    return 'needs_attention';
+  }
   if (display === 'denied' || st === 'denied') return 'denied';
   return '';
 }
@@ -326,6 +331,46 @@ async function cancelRequest(requestId) {
   }
 }
 
+/** Matches backend userMayDeleteRequestViaUserApi (finished / canceled rows only; not pending/requested). */
+function trackRowMayClear(request) {
+  const st = String(request?.status || '');
+  const cancelled = Number(request?.cancelled) === 1;
+  if (st === 'pending' || st === 'requested') {
+    return false;
+  }
+  if (st === 'completed' || st === 'denied' || st === 'available') {
+    return true;
+  }
+  if (st === 'failed' && cancelled) {
+    return true;
+  }
+  if (st === 'processing' && cancelled) {
+    return true;
+  }
+  return false;
+}
+
+function appendTrackClearButton(actionsTd, request) {
+  const clearBtn = document.createElement('button');
+  clearBtn.type = 'button';
+  clearBtn.textContent = 'Clear';
+  clearBtn.addEventListener('click', async () => {
+    clearBtn.disabled = true;
+    try {
+      const res = await fetch(`/api/requests/${request.id}`, { method: 'DELETE', credentials: 'same-origin' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || 'Clear failed');
+      }
+      await loadAll();
+    } catch (e) {
+      console.error(e);
+      clearBtn.disabled = false;
+    }
+  });
+  actionsTd.appendChild(clearBtn);
+}
+
 function renderTrackActionsCell(request) {
   const actionsTd = document.createElement('td');
   const status = String(request.status || '');
@@ -351,6 +396,10 @@ function renderTrackActionsCell(request) {
       return actionsTd;
     }
     if (status === 'processing') {
+      if (Number(request.cancelled) === 1) {
+        appendTrackClearButton(actionsTd, request);
+        return actionsTd;
+      }
       const cancelBtn = document.createElement('button');
       cancelBtn.type = 'button';
       cancelBtn.textContent = 'Cancel';
@@ -381,6 +430,9 @@ function renderTrackActionsCell(request) {
       actionsTd.appendChild(denyBtn);
       return actionsTd;
     }
+    if (trackRowMayClear(request)) {
+      appendTrackClearButton(actionsTd, request);
+    }
     return actionsTd;
   }
 
@@ -404,6 +456,8 @@ function renderTrackActionsCell(request) {
       }
     });
     actionsTd.appendChild(withdrawBtn);
+  } else if (own && trackRowMayClear(request)) {
+    appendTrackClearButton(actionsTd, request);
   }
   return actionsTd;
 }
@@ -533,6 +587,33 @@ function renderFollowTable() {
         });
         actionsTd.appendChild(withdrawBtn);
       }
+    } else if (isAdmin && (r.followStatus === 'approved' || r.followStatus === 'denied')) {
+      const rawId = r.id;
+      const histKey = typeof rawId === 'string' && rawId.startsWith('hist-') ? rawId.slice(5) : '';
+      const histId = histKey !== '' ? Number(histKey) : NaN;
+      if (Number.isInteger(histId) && histId > 0) {
+        const clearBtn = document.createElement('button');
+        clearBtn.type = 'button';
+        clearBtn.textContent = 'Clear';
+        clearBtn.addEventListener('click', async () => {
+          clearBtn.disabled = true;
+          try {
+            const res = await fetch(`/api/requests/follow-history/${histId}`, {
+              method: 'DELETE',
+              credentials: 'same-origin',
+            });
+            if (!res.ok) {
+              const data = await res.json().catch(() => ({}));
+              throw new Error(data?.error || 'Clear failed');
+            }
+            await loadAll();
+          } catch (e) {
+            console.error(e);
+            clearBtn.disabled = false;
+          }
+        });
+        actionsTd.appendChild(clearBtn);
+      }
     }
     tr.appendChild(actionsTd);
     followRequestsBody.appendChild(tr);
@@ -593,12 +674,18 @@ async function loadFollowRows() {
   const arData = await arRes.json().catch(() => ({}));
   const rows = [];
   for (const r of Array.isArray(plData.results) ? plData.results : []) {
-    if (r.follow_status !== 'pending') continue;
-    rows.push({ id: r.id, apiKind: 'playlist', displayKind: 'Playlist', title: r.title || r.playlist_id, userLabel: '', createdAt: r.created_at, followStatus: 'pending', followStatusLabel: 'Pending' });
+    if (r.follow_status === 'pending') {
+      rows.push({ id: r.id, apiKind: 'playlist', displayKind: 'Playlist', title: r.title || r.playlist_id, userLabel: '', createdAt: r.created_at, followStatus: 'pending', followStatusLabel: 'Pending' });
+    } else if (r.follow_status === 'denied') {
+      rows.push({ id: r.id, apiKind: 'playlist', displayKind: 'Playlist', title: r.title || r.playlist_id, userLabel: '', createdAt: r.created_at, followStatus: 'denied', followStatusLabel: 'Denied' });
+    }
   }
   for (const r of Array.isArray(arData.results) ? arData.results : []) {
-    if (r.follow_status !== 'pending') continue;
-    rows.push({ id: r.id, apiKind: 'artist', displayKind: 'Artist', title: r.name || r.artist_id, userLabel: '', createdAt: r.created_at, followStatus: 'pending', followStatusLabel: 'Pending' });
+    if (r.follow_status === 'pending') {
+      rows.push({ id: r.id, apiKind: 'artist', displayKind: 'Artist', title: r.name || r.artist_id, userLabel: '', createdAt: r.created_at, followStatus: 'pending', followStatusLabel: 'Pending' });
+    } else if (r.follow_status === 'denied') {
+      rows.push({ id: r.id, apiKind: 'artist', displayKind: 'Artist', title: r.name || r.artist_id, userLabel: '', createdAt: r.created_at, followStatus: 'denied', followStatusLabel: 'Denied' });
+    }
   }
   currentFollowRows = rows;
 }
