@@ -7,6 +7,7 @@ const {
   ARTIST_TOP_TRACKS_LIMIT,
 } = require('../services/deezer');
 const { ingestRawDeezerTracks } = require('../services/syncTrackRequests');
+const { yieldToEventLoop } = require('../services/cooperativeYield');
 
 function readFollowSyncSettings() {
   try {
@@ -50,6 +51,7 @@ async function runFollowSyncJob() {
   let artists_processed = 0;
 
   for (const row of playlists) {
+    await yieldToEventLoop();
     const playlistId = row.playlist_id != null ? String(row.playlist_id).trim() : '';
     if (!playlistId) {
       continue;
@@ -70,6 +72,7 @@ async function runFollowSyncJob() {
   }
 
   for (const row of artists) {
+    await yieldToEventLoop();
     const artistId = row.artist_id != null ? String(row.artist_id).trim() : '';
     if (!artistId) {
       continue;

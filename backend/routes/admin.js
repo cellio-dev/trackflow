@@ -17,26 +17,26 @@ const router = express.Router();
 const db = getDb();
 
 const getRequestByIdStmt = db.prepare(`
-  SELECT id, deezer_id, title, artist, album, user_id, status, duration_seconds, cancelled, processing_phase, created_at, request_type
+  SELECT id, deezer_id, title, artist, album, user_id, status, duration_seconds, cancelled, processing_phase, created_at, processed_at, request_type
   FROM requests
   WHERE id = ?
 `);
 
 const setFailedStmt = db.prepare(`
   UPDATE requests
-  SET status = 'failed', processing_phase = NULL
+  SET status = 'failed', processing_phase = NULL, processed_at = datetime('now')
   WHERE id = ?
 `);
 
 const setCancelledFailedStmt = db.prepare(`
   UPDATE requests
-  SET status = 'failed', cancelled = 1, processing_phase = NULL
+  SET status = 'failed', cancelled = 1, processing_phase = NULL, processed_at = datetime('now')
   WHERE id = ?
 `);
 
 const setCompletedFromLibraryStmt = db.prepare(`
   UPDATE requests
-  SET status = 'completed', cancelled = 0, processing_phase = NULL
+  SET status = 'completed', cancelled = 0, processing_phase = NULL, processed_at = datetime('now')
   WHERE id = ?
 `);
 
@@ -47,7 +47,7 @@ const deleteRequestStmt = db.prepare(`
 
 const setRequestDeniedStmt = db.prepare(`
   UPDATE requests
-  SET status = 'denied', cancelled = 0, processing_phase = NULL
+  SET status = 'denied', cancelled = 0, processing_phase = NULL, processed_at = datetime('now')
   WHERE id = ?
 `);
 

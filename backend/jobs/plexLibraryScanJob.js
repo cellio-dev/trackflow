@@ -15,6 +15,10 @@ const {
 const { getAvailabilitySettingsSync } = require('../services/libraryAvailability');
 const { getTrackById } = require('../services/deezer');
 const { applyPlexRatingKeyFromPlexMetadata, loadTracksPresencePool } = require('../services/tracksDb');
+const { yieldToEventLoop } = require('../services/cooperativeYield');
+
+/** Plex rating-key pass: yield often so matching + Deezer lookups do not freeze HTTP. */
+const ITEMS_PER_EVENT_LOOP_TURN = 32;
 
 function plexDurationToSeconds(item) {
   const ms = Number(item?.duration);
@@ -82,8 +86,8 @@ async function runPlexLibraryScanJob() {
         `[plexLibraryScanJob] progress ${i + 1}/${items.length} tracks processed, ${matched} rating key match(es) so far (${Date.now() - tScan}ms elapsed)`,
       );
     }
-    if (i > 0 && i % 250 === 0) {
-      await new Promise((r) => setImmediate(r));
+    if ((i + 1) % ITEMS_PER_EVENT_LOOP_TURN === 0) {
+      await yieldToEventLoop();
     }
 
     const albumArtistPlex = String(item?.grandparentTitle || '').trim() || null;

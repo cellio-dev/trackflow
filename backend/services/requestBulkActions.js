@@ -13,18 +13,19 @@ const {
   deleteFollowHistoryByOutcomeForScope,
 } = require('./followRequestHistory');
 const { addBlockedTrackFromRequestRow } = require('./blockedTracks');
+const { yieldToEventLoop } = require('./cooperativeYield');
 
 const db = getDb();
 
 const getRequestByIdStmt = db.prepare(`
-  SELECT id, deezer_id, title, artist, album, user_id, status, duration_seconds, cancelled, processing_phase, created_at, request_type
+  SELECT id, deezer_id, title, artist, album, user_id, status, duration_seconds, cancelled, processing_phase, created_at, processed_at, request_type
   FROM requests
   WHERE id = ?
 `);
 
 const setCancelledFailedStmt = db.prepare(`
   UPDATE requests
-  SET status = 'failed', cancelled = 1
+  SET status = 'failed', cancelled = 1, processed_at = datetime('now')
   WHERE id = ?
 `);
 
@@ -101,7 +102,7 @@ async function cancelAllActive(options = {}) {
 }
 
 const listDenyCandidatesByUserStmt = db.prepare(`
-  SELECT id, deezer_id, title, artist, album, user_id, status, duration_seconds, cancelled, processing_phase, created_at, request_type
+  SELECT id, deezer_id, title, artist, album, user_id, status, duration_seconds, cancelled, processing_phase, created_at, processed_at, request_type
   FROM requests
   WHERE user_id = ?
     AND (
@@ -112,7 +113,7 @@ const listDenyCandidatesByUserStmt = db.prepare(`
 `);
 
 const listDenyCandidatesStmt = db.prepare(`
-  SELECT id, deezer_id, title, artist, album, user_id, status, duration_seconds, cancelled, processing_phase, created_at, request_type
+  SELECT id, deezer_id, title, artist, album, user_id, status, duration_seconds, cancelled, processing_phase, created_at, processed_at, request_type
   FROM requests
   WHERE status IN ('pending', 'requested')
      OR (status = 'failed' AND IFNULL(cancelled, 0) != 1)
@@ -121,7 +122,7 @@ const listDenyCandidatesStmt = db.prepare(`
 
 const setRequestDeniedStmt = db.prepare(`
   UPDATE requests
-  SET status = 'denied', cancelled = 0, processing_phase = NULL
+  SET status = 'denied', cancelled = 0, processing_phase = NULL, processed_at = datetime('now')
   WHERE id = ?
 `);
 
@@ -293,8 +294,8 @@ function clearCompletedRequestsOlderThanDays(options = {}) {
   const days = Math.min(3650, Math.max(1, Math.floor(Number(options.older_than_days) || 0)));
   const mod = `-${days} days`;
   const sql = userId
-    ? `DELETE FROM requests WHERE user_id = ? AND status = 'completed' AND datetime(created_at) < datetime('now', ?)`
-    : `DELETE FROM requests WHERE status = 'completed' AND datetime(created_at) < datetime('now', ?)`;
+    ? `DELETE FROM requests WHERE user_id = ? AND status = 'completed' AND datetime(COALESCE(processed_at, created_at)) < datetime('now', ?)`
+    : `DELETE FROM requests WHERE status = 'completed' AND datetime(COALESCE(processed_at, created_at)) < datetime('now', ?)`;
   const r = userId ? db.prepare(sql).run(userId, mod) : db.prepare(sql).run(mod);
   return { deletedTracks: r.changes || 0 };
 }
@@ -311,8 +312,8 @@ function clearHistoryOlderThanDays(options = {}) {
     : db.prepare(trackSqlTerminal).run(mod);
 
   const delOldCompletedSql = userId
-    ? `DELETE FROM requests WHERE user_id = ? AND status = 'completed' AND datetime(created_at) < datetime('now', ?)`
-    : `DELETE FROM requests WHERE status = 'completed' AND datetime(created_at) < datetime('now', ?)`;
+    ? `DELETE FROM requests WHERE user_id = ? AND status = 'completed' AND datetime(COALESCE(processed_at, created_at)) < datetime('now', ?)`
+    : `DELETE FROM requests WHERE status = 'completed' AND datetime(COALESCE(processed_at, created_at)) < datetime('now', ?)`;
   const completedResult = userId
     ? db.prepare(delOldCompletedSql).run(userId, mod)
     : db.prepare(delOldCompletedSql).run(mod);
@@ -340,7 +341,7 @@ async function retryFailedRequestsOlderThanDays(options = {}) {
         WHERE user_id = ?
           AND status = 'failed'
           AND IFNULL(cancelled, 0) != 1
-          AND datetime(created_at) < datetime('now', ?)
+          AND datetime(COALESCE(processed_at, created_at)) < datetime('now', ?)
         ORDER BY id ASC
       `)
     : db.prepare(`
@@ -348,15 +349,19 @@ async function retryFailedRequestsOlderThanDays(options = {}) {
         FROM requests
         WHERE status = 'failed'
           AND IFNULL(cancelled, 0) != 1
-          AND datetime(created_at) < datetime('now', ?)
+          AND datetime(COALESCE(processed_at, created_at)) < datetime('now', ?)
         ORDER BY id ASC
       `);
   const rows = userId ? listStmt.all(userId, mod) : listStmt.all(mod);
   let retried = 0;
-  for (const row of rows) {
+  for (let i = 0; i < rows.length; i += 1) {
+    const row = rows[i];
     const result = await approveRequestById(row.id);
     if (result.ok) {
       retried += 1;
+    }
+    if (i + 1 < rows.length) {
+      await yieldToEventLoop();
     }
   }
   return { retried };

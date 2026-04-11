@@ -136,6 +136,9 @@ function buildPlaylistGridRow(row, ctx) {
 
   const card = document.createElement('div');
   card.className = 'search-entity-card search-entity-card--playlist';
+  if (ctx.showOwnerBadge() && row.owner_username) {
+    card.classList.add('search-entity-card--followed-show-owner');
+  }
   card.setAttribute('role', 'link');
   card.setAttribute('tabindex', '0');
   card.setAttribute(
@@ -218,12 +221,10 @@ function buildPlaylistGridRow(row, ctx) {
   }
   if (playlistRowShowsPlexSyncBadge(row)) {
     const plexSlot = document.createElement('span');
-    plexSlot.className = 'search-entity-card__plex-sync-slot';
+    plexSlot.className = 'search-entity-card__plex-sync-slot followed-grid-plex-badge';
     plexSlot.setAttribute('aria-label', 'Synced to Plex');
     plexSlot.innerHTML = PLEX_SYNC_SVG_HTML;
-    followStrip.appendChild(plexSlot);
-    followStrip.classList.add('search-entity-card__follow-strip--has-plex-sync');
-    followStrip.classList.add('followed-card__follow-strip--plex-always-visible');
+    card.appendChild(plexSlot);
   }
   followStrip.appendChild(followBtn);
   card.appendChild(followStrip);

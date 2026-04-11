@@ -15,6 +15,10 @@ const fs = require('fs');
 const path = require('path');
 const { getSlskdLocalDownloadPath } = require('../services/libraryMove');
 const runtimeConfig = require('../services/runtimeConfig');
+const { yieldToEventLoop } = require('../services/cooperativeYield');
+
+const READDIR_YIELD_EVERY = 56;
+const UNLINK_LOOP_YIELD_EVERY = 40;
 
 /** Files must be at least this old before unlink; newly completed files leave within seconds. */
 const MIN_ENTRY_AGE_MS = 10 * 60 * 1000;
@@ -85,19 +89,29 @@ function isStrictlyInsideDownloadRoot(rootResolved, absolutePath) {
   return true;
 }
 
-function listFilesRecursive(rootDir, maxDepth = 80) {
+/**
+ * @param {string} rootDir
+ * @param {number} maxDepth
+ * @returns {Promise<string[]>}
+ */
+async function listFilesRecursiveAsync(rootDir, maxDepth = 80) {
   /** @type {string[]} */
   const out = [];
+  let readdirCount = 0;
 
-  function walk(dir, depth) {
+  async function walk(dir, depth) {
     if (depth > maxDepth) {
       return;
     }
     let entries;
     try {
-      entries = fs.readdirSync(dir, { withFileTypes: true });
+      entries = await fs.promises.readdir(dir, { withFileTypes: true });
     } catch {
       return;
+    }
+    readdirCount += 1;
+    if (readdirCount % READDIR_YIELD_EVERY === 0) {
+      await yieldToEventLoop();
     }
     for (const ent of entries) {
       const full = path.join(dir, ent.name);
@@ -107,7 +121,7 @@ function listFilesRecursive(rootDir, maxDepth = 80) {
           continue;
         }
         if (ent.isDirectory()) {
-          walk(full, depth + 1);
+          await walk(full, depth + 1);
         } else if (ent.isFile()) {
           out.push(full);
         }
@@ -117,24 +131,29 @@ function listFilesRecursive(rootDir, maxDepth = 80) {
     }
   }
 
-  walk(rootDir, 0);
+  await walk(rootDir, 0);
   return out;
 }
 
 /** All directories under root (including nested), depth-first post-order (children before parents). */
-function listDirsPostOrder(rootDir, maxDepth = 80) {
+async function listDirsPostOrderAsync(rootDir, maxDepth = 80) {
   /** @type {string[]} */
   const out = [];
+  let readdirCount = 0;
 
-  function walk(dir, depth) {
+  async function walk(dir, depth) {
     if (depth > maxDepth) {
       return;
     }
     let entries;
     try {
-      entries = fs.readdirSync(dir, { withFileTypes: true });
+      entries = await fs.promises.readdir(dir, { withFileTypes: true });
     } catch {
       return;
+    }
+    readdirCount += 1;
+    if (readdirCount % READDIR_YIELD_EVERY === 0) {
+      await yieldToEventLoop();
     }
     for (const ent of entries) {
       if (ent.isSymbolicLink()) {
@@ -145,7 +164,7 @@ function listDirsPostOrder(rootDir, maxDepth = 80) {
       }
       const full = path.join(dir, ent.name);
       try {
-        walk(full, depth + 1);
+        await walk(full, depth + 1);
         out.push(full);
       } catch {
         // ignore
@@ -153,7 +172,7 @@ function listDirsPostOrder(rootDir, maxDepth = 80) {
     }
   }
 
-  walk(rootDir, 0);
+  await walk(rootDir, 0);
   return out;
 }
 
@@ -223,11 +242,15 @@ async function runOrphanDownloadsCleanup() {
   // Must match realpath(file) — if root is a symlink/bind mount, unresolved root breaks prefix checks.
   const rootCanonical = await fs.promises.realpath(root).catch(() => root);
 
-  const files = listFilesRecursive(root);
+  const files = await listFilesRecursiveAsync(root);
   let removedFiles = 0;
   const nowEpochMs = utcEpochMsNow();
 
-  for (const filePath of files) {
+  for (let fi = 0; fi < files.length; fi += 1) {
+    const filePath = files[fi];
+    if (fi > 0 && fi % UNLINK_LOOP_YIELD_EVERY === 0) {
+      await yieldToEventLoop();
+    }
     let resolved = path.resolve(filePath);
     try {
       resolved = await fs.promises.realpath(resolved).catch(() => resolved);
@@ -269,7 +292,7 @@ async function runOrphanDownloadsCleanup() {
   let pruned = true;
   while (pruned) {
     pruned = false;
-    const dirsPostOrder = listDirsPostOrder(root);
+    const dirsPostOrder = await listDirsPostOrderAsync(root);
     for (const dirPath of dirsPostOrder) {
       let resolved = path.resolve(dirPath);
       try {

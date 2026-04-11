@@ -1,4 +1,4 @@
-const { spawnSync } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const path = require('path');
 
 const SCRIPT = path.join(__dirname, '..', 'scripts', 'trackflow_mutagen.py');
@@ -45,11 +45,111 @@ function parseLastJsonLine(stdout) {
   }
 }
 
+const READ_TAGS_TIMEOUT_MS = 20_000;
+
+/**
+ * Async tag read (non-blocking vs sync spawn). Same JSON shape as `readTagsForFileSync`.
+ * @param {string} filePath
+ * @returns {Promise<object>}
+ */
+function readTagsForFile(filePath) {
+  return new Promise((resolve) => {
+    let settled = false;
+    let timeout;
+    const finishOnce = (value) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (timeout) {
+        clearTimeout(timeout);
+      }
+      resolve(value);
+    };
+
+    let child;
+    try {
+      child = spawn(pythonCmd(), [SCRIPT, 'read', filePath], {
+        encoding: 'utf8',
+        env: pythonEnv(),
+        windowsHide: true,
+      });
+    } catch (e) {
+      finishOnce({
+        ok: false,
+        error: 'read_tags_exception',
+        details: String(e?.message || e),
+      });
+      return;
+    }
+
+    let stdout = '';
+    let stderr = '';
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', (d) => {
+      stdout += d;
+    });
+    child.stderr.on('data', (d) => {
+      stderr += d;
+    });
+
+    timeout = setTimeout(() => {
+      try {
+        child.kill('SIGTERM');
+      } catch {
+        /* ignore */
+      }
+      finishOnce({ ok: false, error: 'timeout', details: 'read_tags_timeout' });
+    }, READ_TAGS_TIMEOUT_MS);
+
+    child.on('error', (err) => {
+      const stderrTrim = String(stderr || '').trim();
+      if (stderrTrim) {
+        console.error('[mutagen] readTagsForFile: stderr', filePath, stderrTrim.slice(0, 800));
+      }
+      console.error('[mutagen] readTagsForFile: spawn error', filePath, err?.message || err);
+      finishOnce(
+        parseLastJsonLine(stdout) || {
+          ok: false,
+          error: 'python_spawn_failed',
+          details: String(err?.message || err),
+        },
+      );
+    });
+
+    child.on('close', (code) => {
+      const parsed = parseLastJsonLine(stdout);
+      const stderrTrim = String(stderr || '').trim();
+
+      if (code !== 0) {
+        if (stderrTrim) {
+          console.error('[mutagen] readTagsForFile: stderr', filePath, stderrTrim.slice(0, 800));
+        }
+        finishOnce(
+          parsed || {
+            ok: false,
+            error: 'python_exit_nonzero',
+            details: String(code),
+          },
+        );
+        return;
+      }
+
+      if (parsed && typeof parsed === 'object') {
+        finishOnce(parsed);
+        return;
+      }
+      finishOnce({ ok: false, error: 'empty_or_invalid_json' });
+    });
+  });
+}
+
 function readTagsForFileSync(filePath) {
   try {
     const r = spawnSync(pythonCmd(), [SCRIPT, 'read', filePath], {
       encoding: 'utf8',
-      timeout: 20_000,
+      timeout: READ_TAGS_TIMEOUT_MS,
       windowsHide: true,
       env: pythonEnv(),
     });
@@ -182,6 +282,7 @@ function isMutagenAvailable() {
 }
 
 module.exports = {
+  readTagsForFile,
   readTagsForFileSync,
   writeTagsForFileSync,
   isMutagenAvailable,

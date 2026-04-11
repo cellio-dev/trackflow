@@ -4,6 +4,7 @@ const {
   refreshDiscoverGenreGlobalCaches,
   rebuildUserDiscoverCacheRow,
 } = require('../services/discoverCacheService');
+const { yieldToEventLoop } = require('../services/cooperativeYield');
 
 const db = getDb();
 
@@ -28,6 +29,7 @@ async function runDiscoverCacheRefreshJob() {
   try {
     const homePayload = await buildAndStoreGlobalHomeCache();
     const genreWarm = await refreshDiscoverGenreGlobalCaches(homePayload);
+    await yieldToEventLoop();
     if (genreWarm.warmed > 0 || genreWarm.failed > 0) {
       console.log(
         `discoverCacheRefreshJob: genre global cache warmed ${genreWarm.warmed}, failed ${genreWarm.failed}`,
@@ -39,6 +41,7 @@ async function runDiscoverCacheRefreshJob() {
 
     let usersProcessed = 0;
     for (let i = 0; i < ids.length; i += 1) {
+      await yieldToEventLoop();
       if (i > 0) {
         await sleep(USER_STAGGER_MS);
       }

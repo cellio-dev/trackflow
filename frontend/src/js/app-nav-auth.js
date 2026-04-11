@@ -15,9 +15,12 @@ export async function initAppNavAuth(me) {
       return;
     }
 
-    if (!me.jukebox_enabled) {
-      for (const a of [...sidebar.querySelectorAll('a.app-nav-item[href="/jukebox.html"]')]) {
-        a.remove();
+    // Sidebar HTML defaults to jukebox hidden so first paint matches jukebox-disabled users (no flash on navigation).
+    for (const a of [...sidebar.querySelectorAll('a.app-nav-item[href="/jukebox.html"]')]) {
+      if (me.jukebox_enabled) {
+        a.removeAttribute('hidden');
+      } else {
+        a.setAttribute('hidden', '');
       }
     }
 
@@ -25,7 +28,7 @@ export async function initAppNavAuth(me) {
       if (me.role === 'admin') {
         a.removeAttribute('hidden');
       } else {
-        a.remove();
+        a.setAttribute('hidden', '');
       }
     }
 

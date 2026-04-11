@@ -45,7 +45,7 @@ const trackClearStatusBtn = document.getElementById('trackClearStatusBtn');
 const trackBulkSummary = document.getElementById('trackBulkSummary');
 const trackBulkButtons = [approveAllBtn, cancelAllBtn, denyAllBtn, retryFailedBtn, trackClearStatusBtn].filter(Boolean);
 
-const activeColSpan = isAdmin ? 9 : 8;
+const activeColSpan = isAdmin ? 10 : 9;
 const followRequestsColSpan = 6;
 
 let sortState = { key: 'title', dir: 'asc' };
@@ -252,6 +252,7 @@ function getSortValue(row, key) {
     case 'user': return row.requested_by_username ?? '';
     case 'source': return displayRequestSource(row.request_type);
     case 'requested': return row.created_at ?? '';
+    case 'processed': return row.processed_at ?? '';
     case 'status': return row.displayStatus ?? '';
     case 'processing': return row.processingStatus ?? '';
     default: return '';
@@ -494,6 +495,7 @@ function renderTrackTable() {
     tr.appendChild(userTd);
     tr.appendChild(td(displayRequestSource(request.request_type)));
     tr.appendChild(td(formatDateTime(request.created_at)));
+    tr.appendChild(td(formatDateTime(request.processed_at)));
     tr.appendChild(td(request.displayStatus ?? ''));
     if (isAdmin) tr.appendChild(td(request.processingStatus ?? ''));
     tr.appendChild(renderTrackActionsCell(request));
@@ -528,13 +530,13 @@ function renderFollowTable() {
       c.textContent = text ?? '';
       return c;
     };
-    tr.appendChild(td(r.followStatusLabel));
     tr.appendChild(td(r.displayKind));
     tr.appendChild(td(r.title));
     const userTd = td(r.userLabel);
     userTd.className = 'admin-only';
     tr.appendChild(userTd);
     tr.appendChild(td(formatDateTime(r.createdAt)));
+    tr.appendChild(td(r.followStatusLabel));
 
     const actionsTd = document.createElement('td');
     if (r.followStatus === 'pending') {

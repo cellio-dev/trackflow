@@ -4,8 +4,12 @@
 
 const path = require('path');
 const { getDb } = require('../db');
+const { yieldToEventLoop } = require('./cooperativeYield');
 
 const db = getDb();
+
+/** Batch size for `markLibraryFilesMissing` transaction chunks (yield between chunks). */
+const MARK_MISSING_DB_CHUNK = 400;
 
 /** Cap for in-memory fuzzy match pool; newest rows first so recent downloads stay matchable. */
 const MAX_POOL_ROWS = 50_000;
@@ -436,13 +440,50 @@ function upsertTrackFromLibraryScan(meta, relativePathUnix) {
   ).run(payload);
 }
 
-function markLibraryFilesMissing(seenRelativePathsUnix) {
+/**
+ * Run multiple library upserts in one SQLite transaction (fewer sync points than one tx per file).
+ * @param {Array<{ meta: object, fullRel: string }>} entries
+ */
+function upsertTracksFromLibraryScanInTransaction(entries) {
+  if (!entries || entries.length === 0) {
+    return;
+  }
+  const run = db.transaction((list) => {
+    for (const ent of list) {
+      upsertTrackFromLibraryScan(ent.meta, ent.fullRel);
+    }
+  });
+  run(entries);
+}
+
+/**
+ * Mark tracks whose files were not seen this scan. Batched updates with yields so large libraries
+ * do not block the event loop for one huge transaction.
+ * @param {string[]} seenRelativePathsUnix
+ * @returns {Promise<void>}
+ */
+async function markLibraryFilesMissing(seenRelativePathsUnix) {
   const rows = db.prepare(`SELECT id, file_path FROM tracks WHERE db_exists = 1 AND file_path IS NOT NULL`).all();
-  const seen = new Set(seenRelativePathsUnix);
+  const seen = new Set(
+    (seenRelativePathsUnix || []).map((p) => String(p || '').replace(/\\/g, '/')),
+  );
+  const missing = [];
   for (const r of rows) {
     const p = String(r.file_path || '').replace(/\\/g, '/');
     if (!seen.has(p)) {
-      db.prepare(`UPDATE tracks SET db_exists = 0, updated_at = datetime('now') WHERE id = ?`).run(r.id);
+      missing.push(r.id);
+    }
+  }
+  const upd = db.prepare(`UPDATE tracks SET db_exists = 0, updated_at = datetime('now') WHERE id = ?`);
+  const runChunk = db.transaction((chunk) => {
+    for (const id of chunk) {
+      upd.run(id);
+    }
+  });
+  for (let i = 0; i < missing.length; i += MARK_MISSING_DB_CHUNK) {
+    runChunk(missing.slice(i, i + MARK_MISSING_DB_CHUNK));
+    if (i + MARK_MISSING_DB_CHUNK < missing.length) {
+      await yieldToEventLoop();
     }
   }
 }
@@ -554,6 +595,7 @@ module.exports = {
   batchDiscoverFromDb,
   enrichRequestRowFromTracksSync,
   upsertTrackFromLibraryScan,
+  upsertTracksFromLibraryScanInTransaction,
   markLibraryFilesMissing,
   applyPlexRatingKeyFromPlexMetadata,
   getRecentlyAddedTracksForDiscover,

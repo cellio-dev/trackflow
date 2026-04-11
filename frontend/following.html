@@ -242,6 +242,33 @@
         opacity: 0.45;
         cursor: default;
       }
+
+      /* Grid: playlist secondary line hidden until hover (global --playlist rule), except admin “All users” owner (match artist cards). */
+      .followed-item .search-entity-card--playlist.search-entity-card--followed-show-owner .search-entity-card__subtitle:not(:empty) {
+        opacity: 1;
+      }
+
+      /* Plex badge: stay visible; follow strip still hides until hover (like artist cards). */
+      .followed-item .followed-grid-plex-badge {
+        position: absolute;
+        left: 10px;
+        bottom: 10px;
+        z-index: 6;
+        box-sizing: border-box;
+        width: 36px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid #3f3f46;
+        border-radius: 8px;
+        background: rgba(24, 24, 27, 0.72);
+        pointer-events: none;
+      }
+
+      .followed-item .followed-grid-plex-badge .search-entity-card__plex-sync-svg {
+        display: block;
+      }
     </style>
   </head>
   <body class="app-layout">
@@ -263,7 +290,7 @@
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M15 2H9a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V3a1 1 0 0 0-1-1z"/><path d="M9 12h6"/><path d="M9 16h6"/></svg>
             <span class="app-nav-item__label">Requests</span>
           </a>
-          <a href="/jukebox.html" class="app-nav-item" aria-label="Jukebox">
+          <a href="/jukebox.html" class="app-nav-item" hidden aria-label="Jukebox">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
             <span class="app-nav-item__label">Jukebox</span>
           </a>

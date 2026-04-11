@@ -83,6 +83,22 @@ if (!hasRequestTypeColumn) {
   db.exec(`ALTER TABLE requests ADD COLUMN request_type TEXT NOT NULL DEFAULT 'Track';`);
 }
 
+const requestColumnsV8 = db.prepare(`PRAGMA table_info(requests)`).all();
+const hasProcessedAtColumn = requestColumnsV8.some((column) => column.name === 'processed_at');
+if (!hasProcessedAtColumn) {
+  db.exec(`ALTER TABLE requests ADD COLUMN processed_at DATETIME;`);
+  db.exec(`
+    UPDATE requests
+    SET processed_at = created_at
+    WHERE processed_at IS NULL
+      AND (
+        status IN ('completed', 'available', 'denied')
+        OR status = 'failed'
+        OR (status = 'processing' AND IFNULL(cancelled, 0) = 1)
+      );
+  `);
+}
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS settings (
     id INTEGER PRIMARY KEY CHECK (id = 1),

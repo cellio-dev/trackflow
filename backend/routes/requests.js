@@ -41,13 +41,13 @@ const insertRequestStmt = db.prepare(`
 `);
 
 const getRequestByIdStmt = db.prepare(`
-  SELECT id, deezer_id, title, artist, album, user_id, status, duration_seconds, cancelled, processing_phase, created_at, request_type
+  SELECT id, deezer_id, title, artist, album, user_id, status, duration_seconds, cancelled, processing_phase, created_at, processed_at, request_type
   FROM requests
   WHERE id = ?
 `);
 
 const getRequestByDeezerIdStmt = db.prepare(`
-  SELECT id, deezer_id, title, artist, album, user_id, status, duration_seconds, cancelled, processing_phase, created_at, request_type
+  SELECT id, deezer_id, title, artist, album, user_id, status, duration_seconds, cancelled, processing_phase, created_at, processed_at, request_type
   FROM requests
   WHERE deezer_id = ?
 `);
@@ -76,27 +76,27 @@ function userMayDeleteRequestViaUserApi(row) {
 }
 
 const listRequestsStmt = db.prepare(`
-  SELECT id, deezer_id, title, artist, album, user_id, status, duration_seconds, cancelled, processing_phase, created_at, request_type
+  SELECT id, deezer_id, title, artist, album, user_id, status, duration_seconds, cancelled, processing_phase, created_at, processed_at, request_type
   FROM requests
   ORDER BY id DESC
 `);
 
 const listRequestsByStatusStmt = db.prepare(`
-  SELECT id, deezer_id, title, artist, album, user_id, status, duration_seconds, cancelled, processing_phase, created_at, request_type
+  SELECT id, deezer_id, title, artist, album, user_id, status, duration_seconds, cancelled, processing_phase, created_at, processed_at, request_type
   FROM requests
   WHERE status = ?
   ORDER BY id DESC
 `);
 
 const listRequestsByUserIdStmt = db.prepare(`
-  SELECT id, deezer_id, title, artist, album, user_id, status, duration_seconds, cancelled, processing_phase, created_at, request_type
+  SELECT id, deezer_id, title, artist, album, user_id, status, duration_seconds, cancelled, processing_phase, created_at, processed_at, request_type
   FROM requests
   WHERE user_id = ?
   ORDER BY id DESC
 `);
 
 const listRequestsByStatusAndUserIdStmt = db.prepare(`
-  SELECT id, deezer_id, title, artist, album, user_id, status, duration_seconds, cancelled, processing_phase, created_at, request_type
+  SELECT id, deezer_id, title, artist, album, user_id, status, duration_seconds, cancelled, processing_phase, created_at, processed_at, request_type
   FROM requests
   WHERE status = ? AND user_id = ?
   ORDER BY id DESC

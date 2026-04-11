@@ -5,6 +5,7 @@
 const { getDb } = require('../db');
 const { getAvailabilitySettingsSync } = require('../services/libraryAvailability');
 const { syncFollowedPlaylistToPlex } = require('../services/plexPlaylistSync');
+const { yieldToEventLoop } = require('../services/cooperativeYield');
 
 const db = getDb();
 
@@ -47,6 +48,7 @@ async function runPlexPlaylistSyncCore() {
   const errors = [];
 
   for (const row of rows) {
+    await yieldToEventLoop();
     try {
       await syncFollowedPlaylistToPlex(row, row.plex_user_token);
       ok += 1;
