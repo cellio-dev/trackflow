@@ -5,6 +5,45 @@
 const { getDb } = require('../db');
 
 /**
+ * Remove a denied tombstone row from followed_* when its follow_request_history row is removed.
+ * @param {{ follow_kind?: string, entity_id?: string, user_id?: string, outcome?: string }} row
+ */
+function purgeDeniedFollowForHistoryRow(row) {
+  if (!row || String(row.outcome || '').toLowerCase() !== 'denied') {
+    return;
+  }
+  const uid = String(row.user_id != null ? row.user_id : '').trim();
+  const eid = String(row.entity_id != null ? row.entity_id : '').trim();
+  if (!uid || !eid) {
+    return;
+  }
+  const db = getDb();
+  const kind = String(row.follow_kind || '').toLowerCase();
+  if (kind === 'playlist') {
+    db.prepare(
+      `DELETE FROM followed_playlists WHERE user_id = ? AND playlist_id = ? AND follow_status = 'denied'`,
+    ).run(uid, eid);
+  } else if (kind === 'artist') {
+    db.prepare(
+      `DELETE FROM followed_artists WHERE user_id = ? AND artist_id = ? AND follow_status = 'denied'`,
+    ).run(uid, eid);
+  }
+}
+
+/** After clearing denied follow history for a scope, drop matching denied follows so users can retry. */
+function purgeDeniedFollowRowsForUserScope(userId) {
+  const db = getDb();
+  if (userId != null && String(userId).trim()) {
+    const u = String(userId).trim();
+    db.prepare(`DELETE FROM followed_playlists WHERE user_id = ? AND follow_status = 'denied'`).run(u);
+    db.prepare(`DELETE FROM followed_artists WHERE user_id = ? AND follow_status = 'denied'`).run(u);
+  } else {
+    db.prepare(`DELETE FROM followed_playlists WHERE follow_status = 'denied'`).run();
+    db.prepare(`DELETE FROM followed_artists WHERE follow_status = 'denied'`).run();
+  }
+}
+
+/**
  * @param {object} row — pending follow row (playlist or artist shape)
  * @param {'playlist'|'artist'} followKind
  * @param {'approved'|'denied'} outcome
@@ -99,19 +138,40 @@ function getFollowHistoryById(id) {
 }
 
 function deleteFollowHistoryById(id) {
-  return listStatements().deleteById.run(id);
+  const row = listStatements().getById.get(id);
+  if (!row) {
+    return { changes: 0 };
+  }
+  const r = listStatements().deleteById.run(id);
+  if (r.changes) {
+    purgeDeniedFollowForHistoryRow(row);
+  }
+  return r;
 }
 
 function deleteFollowHistoryByIdForUser(id, userId) {
-  return listStatements().deleteByIdForUser.run(id, String(userId));
+  const uid = String(userId);
+  const row = listStatements().getById.get(id);
+  if (!row || String(row.user_id) !== uid) {
+    return { changes: 0 };
+  }
+  const r = listStatements().deleteByIdForUser.run(id, uid);
+  if (r.changes) {
+    purgeDeniedFollowForHistoryRow(row);
+  }
+  return r;
 }
 
 function deleteAllFollowHistoryForUser(userId) {
-  return listStatements().deleteAllForUser.run(String(userId));
+  const r = listStatements().deleteAllForUser.run(String(userId));
+  purgeDeniedFollowRowsForUserScope(String(userId));
+  return r;
 }
 
 function deleteAllFollowHistory() {
-  return listStatements().deleteAll.run();
+  const r = listStatements().deleteAll.run();
+  purgeDeniedFollowRowsForUserScope(null);
+  return r;
 }
 
 /**
@@ -122,6 +182,17 @@ function deleteFollowHistoryOlderThanDays(days, userId) {
   const d = Math.min(3650, Math.max(1, Math.floor(Number(days) || 0)));
   const mod = `-${d} days`;
   const db = getDb();
+  const listSql =
+    userId != null && String(userId).trim()
+      ? `SELECT follow_kind, entity_id, user_id, outcome FROM follow_request_history WHERE user_id = ? AND datetime(IFNULL(resolved_at, requested_at)) < datetime('now', ?)`
+      : `SELECT follow_kind, entity_id, user_id, outcome FROM follow_request_history WHERE datetime(IFNULL(resolved_at, requested_at)) < datetime('now', ?)`;
+  const stale =
+    userId != null && String(userId).trim()
+      ? db.prepare(listSql).all(String(userId).trim(), mod)
+      : db.prepare(listSql).all(mod);
+  for (let i = 0; i < stale.length; i += 1) {
+    purgeDeniedFollowForHistoryRow(stale[i]);
+  }
   if (userId != null && String(userId).trim()) {
     return db
       .prepare(
@@ -141,12 +212,18 @@ function deleteFollowHistoryByOutcomeForScope(outcome, userId) {
     return { changes: 0 };
   }
   const db = getDb();
+  let histChanges;
   if (userId != null && String(userId).trim()) {
-    return db
+    histChanges = db
       .prepare(`DELETE FROM follow_request_history WHERE outcome = ? AND user_id = ?`)
       .run(outcome, String(userId).trim());
+  } else {
+    histChanges = db.prepare(`DELETE FROM follow_request_history WHERE outcome = ?`).run(outcome);
   }
-  return db.prepare(`DELETE FROM follow_request_history WHERE outcome = ?`).run(outcome);
+  if (outcome === 'denied') {
+    purgeDeniedFollowRowsForUserScope(userId);
+  }
+  return histChanges;
 }
 
 module.exports = {

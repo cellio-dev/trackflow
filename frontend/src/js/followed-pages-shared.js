@@ -279,6 +279,28 @@ export async function mountFollowingPage(options) {
   const viewKey = `${VIEW_STORAGE_PREFIX}following`;
   const filterKey = `${FILTER_STORAGE_PREFIX}following`;
 
+  if (isAdmin) {
+    window.addEventListener('pagehide', () => {
+      try {
+        localStorage.removeItem(filterKey);
+      } catch {
+        /* ignore */
+      }
+    });
+    window.addEventListener('pageshow', (ev) => {
+      if (!ev.persisted || !userFilter) {
+        return;
+      }
+      userFilter.value = 'self';
+      try {
+        localStorage.setItem(filterKey, 'self');
+      } catch {
+        /* ignore */
+      }
+      void loadFollowed();
+    });
+  }
+
   function consumeUrlTypeParam() {
     try {
       const u = new URL(window.location.href);
