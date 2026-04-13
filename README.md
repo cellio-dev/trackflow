@@ -6,6 +6,15 @@ Discover music. Follow what you like. TrackFlow handles the rest.
 
 ---
 
+## 📸 Screenshots
+
+![Discover](docs/screenshots/discover.png)
+![Following](docs/screenshots/following.png)
+![Requests](docs/screenshots/requests.png)
+![Jukebox](docs/screenshots/jukebox.png)
+
+---
+
 ## 🚀 What Makes TrackFlow Different
 
 TrackFlow doesn’t just help you find music — it **continuously brings it into your library**.
@@ -34,6 +43,7 @@ It turns music discovery into a **fully automated pipeline**.
 
 ### 🎧 Discovery
 - Search tracks, artists, albums, and playlists
+- Play track previews
 - Fast, track-first browsing
 
 ### 🔁 Follow System (Key Feature)
@@ -68,7 +78,8 @@ It turns music discovery into a **fully automated pipeline**.
 
 - Track-first, not album-first  
 - Continuous discovery  
-- Always evolving taste  
+- Always evolving taste
+- Mobile/PWA friendly interface
 
 TrackFlow keeps your music **alive and growing** instead of static.
 
