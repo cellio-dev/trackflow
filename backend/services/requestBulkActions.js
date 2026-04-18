@@ -12,7 +12,7 @@ const {
   deleteFollowHistoryOlderThanDays,
   deleteFollowHistoryByOutcomeForScope,
 } = require('./followRequestHistory');
-const { addBlockedTrackFromRequestRow } = require('./blockedTracks');
+const { addBlockedTrackFromRequestRow, removeBlockedTracksMatchingRequestProbe } = require('./blockedTracks');
 const { yieldToEventLoop } = require('./cooperativeYield');
 
 const db = getDb();
@@ -192,6 +192,16 @@ const CLEARABLE_STATUSES = ['completed', 'failed', 'available', 'denied'];
  */
 function clearAllRequests(options = {}) {
   const userId = normalizeUserScope(options.userId);
+  const listDeniedStmt = userId
+    ? db.prepare(
+        `SELECT deezer_id, title, artist, duration_seconds FROM requests WHERE user_id = ? AND status = 'denied'`,
+      )
+    : db.prepare(`SELECT deezer_id, title, artist, duration_seconds FROM requests WHERE status = 'denied'`);
+  const deniedRows = userId ? listDeniedStmt.all(userId) : listDeniedStmt.all();
+  for (const row of deniedRows) {
+    removeBlockedTracksMatchingRequestProbe(row);
+  }
+
   const placeholders = CLEARABLE_STATUSES.map(() => '?').join(', ');
   const sql = userId
     ? `DELETE FROM requests WHERE user_id = ? AND status IN (${placeholders})`
@@ -220,6 +230,20 @@ const HISTORY_TRACK_AGE_TERMINAL_SQL = `
  */
 function clearAllHistory(options = {}) {
   const userId = normalizeUserScope(options.userId);
+
+  const listDeniedForTerminalStmt = userId
+    ? db.prepare(
+        `SELECT deezer_id, title, artist, duration_seconds FROM requests WHERE user_id = ? AND (${HISTORY_TRACK_TERMINAL_SQL}) AND status = 'denied'`,
+      )
+    : db.prepare(
+        `SELECT deezer_id, title, artist, duration_seconds FROM requests WHERE (${HISTORY_TRACK_TERMINAL_SQL}) AND status = 'denied'`,
+      );
+  const deniedForTerminal = userId
+    ? listDeniedForTerminalStmt.all(userId)
+    : listDeniedForTerminalStmt.all();
+  for (const row of deniedForTerminal) {
+    removeBlockedTracksMatchingRequestProbe(row);
+  }
 
   const delTerminalStmt = userId
     ? db.prepare(`DELETE FROM requests WHERE user_id = ? AND (${HISTORY_TRACK_TERMINAL_SQL})`)
@@ -267,6 +291,16 @@ function clearHistoryTrackByStatus(options = {}) {
   if (!clause) {
     return { deleted: 0 };
   }
+  const selectSql = userId
+    ? `SELECT deezer_id, title, artist, duration_seconds, status FROM requests WHERE user_id = ? AND (${clause})`
+    : `SELECT deezer_id, title, artist, duration_seconds, status FROM requests WHERE (${clause})`;
+  const probeRows = userId ? db.prepare(selectSql).all(userId) : db.prepare(selectSql).all();
+  for (const row of probeRows) {
+    if (String(row.status || '') === 'denied') {
+      removeBlockedTracksMatchingRequestProbe(row);
+    }
+  }
+
   const sql = userId
     ? `DELETE FROM requests WHERE user_id = ? AND (${clause})`
     : `DELETE FROM requests WHERE (${clause})`;

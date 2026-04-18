@@ -40,11 +40,21 @@ const getBlockedByDeezerIdStmt = db.prepare(`
   LIMIT 1
 `);
 
+const deleteBlockedTracksByDeezerIdStmt = db.prepare(`
+  DELETE FROM blocked_tracks
+  WHERE deezer_id = ?
+`);
+
 const listBlockedForMetaProbeStmt = db.prepare(`
   SELECT deezer_id, title, artist, duration_seconds
   FROM blocked_tracks
   ORDER BY id DESC
   LIMIT 5000
+`);
+
+const listAllBlockedForCleanupStmt = db.prepare(`
+  SELECT id, deezer_id, title, artist, duration_seconds
+  FROM blocked_tracks
 `);
 
 function normalizeUserScope(userId) {
@@ -133,11 +143,74 @@ function isTrackBlocked(probe) {
   return rows.some((row) => isLikelySameTrack(probe, row));
 }
 
+/**
+ * True if a blocked_tracks row should be removed when clearing this request (denied → delete).
+ * Matches Deezer id when both present, otherwise same artist/title heuristics as isTrackBlocked.
+ */
+function blockedRowMatchesClearedRequest(probe, blockedRow) {
+  if (!probe || !blockedRow) {
+    return false;
+  }
+  const pf = probe.deezer_id != null ? String(probe.deezer_id).trim() : '';
+  const bf = blockedRow.deezer_id != null ? String(blockedRow.deezer_id).trim() : '';
+  if (pf && bf && pf === bf) {
+    return true;
+  }
+  return isLikelySameTrack(probe, blockedRow);
+}
+
+/**
+ * Remove every blocklist row tied to this request (by Deezer id and/or artist+title).
+ * Use when a denied request is cleared so the track can be requested again.
+ * @param {object} probe — shape like a request row: deezer_id, title, artist, duration_seconds?
+ * @returns {number} rows deleted from blocked_tracks
+ */
+function removeBlockedTracksMatchingRequestProbe(probe) {
+  if (!probe || typeof probe !== 'object') {
+    return 0;
+  }
+  const all = listAllBlockedForCleanupStmt.all();
+  let deleted = 0;
+  for (const br of all) {
+    if (blockedRowMatchesClearedRequest(probe, br)) {
+      deleteBlockedTrackByIdStmt.run(br.id);
+      deleted += 1;
+    }
+  }
+  return deleted;
+}
+
+/**
+ * Remove blocklist rows for these Deezer ids (e.g. when a denied request row is cleared from history).
+ * @param {Array<string | number | null | undefined>} deezerIds
+ * @returns {{ deleted: number }}
+ */
+function removeBlockedTracksForDeezerIds(deezerIds) {
+  const uniq = new Set();
+  for (const raw of deezerIds || []) {
+    if (raw == null || raw === '') {
+      continue;
+    }
+    const flow = String(raw).trim();
+    if (flow) {
+      uniq.add(flow);
+    }
+  }
+  let deleted = 0;
+  for (const id of uniq) {
+    const r = deleteBlockedTracksByDeezerIdStmt.run(id);
+    deleted += r.changes || 0;
+  }
+  return { deleted };
+}
+
 module.exports = {
   addBlockedTrackFromRequestRow,
   listBlockedTracks,
   deleteBlockedTrackById,
   clearBlockedTracks,
   isTrackBlocked,
+  removeBlockedTracksForDeezerIds,
+  removeBlockedTracksMatchingRequestProbe,
 };
 

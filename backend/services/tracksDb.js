@@ -559,6 +559,36 @@ const recentDiscoverStmt = db.prepare(`
   LIMIT ?
 `);
 
+/**
+ * Library rows that match the same artist/title semantics as request/track matching (metaMatch).
+ * @param {string} artist
+ * @param {string} title
+ * @param {number} [max=5]
+ * @returns {{ artist: string, title: string, file_path: string|null }[]}
+ */
+function findLibraryTracksMetaMatching(artist, title, max = 5) {
+  const cap = Math.min(20, Math.max(1, Math.floor(Number(max) || 5)));
+  const probe = { artist, title };
+  const pool = loadPoolStmt.all();
+  const out = [];
+  for (const row of pool) {
+    if (!rowIsPresent(row)) {
+      continue;
+    }
+    if (metaMatch(probe, row)) {
+      out.push({
+        artist: row.artist || '',
+        title: row.title || '',
+        file_path: row.file_path || null,
+      });
+      if (out.length >= cap) {
+        break;
+      }
+    }
+  }
+  return out;
+}
+
 function getRecentlyAddedTracksForDiscover(limit = 20) {
   const lim = Math.min(100, Math.max(1, Math.floor(Number(limit) || 20)));
   const rows = recentDiscoverStmt.all(lim);
@@ -599,6 +629,7 @@ module.exports = {
   markLibraryFilesMissing,
   applyPlexRatingKeyFromPlexMetadata,
   getRecentlyAddedTracksForDiscover,
+  findLibraryTracksMetaMatching,
   loadPoolStmt,
   getByFlowStmt,
 };

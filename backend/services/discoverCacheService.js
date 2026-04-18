@@ -20,6 +20,8 @@ const {
 const LIMIT = 20;
 /** Match client DISCOVER_PREVIEW_BATCH and route cap — full batch must be enriched, not first LIMIT rows only. */
 const MAX_TRACK_PREVIEW_FETCH = 80;
+/** Deezer chart / editorial depth in global cache so filtering out library tracks can still fill visible rows. */
+const DISCOVER_GLOBAL_TRACK_POOL = Math.min(100, MAX_TRACK_PREVIEW_FETCH);
 /** Cap parallel GET /track/:id calls for ids not served from preview memory cache. */
 const PREVIEW_FETCH_CONCURRENCY = 8;
 
@@ -130,14 +132,15 @@ function cacheRowFresh(updatedAt, ttlMs) {
   return Date.now() - t < ttlMs;
 }
 
-function unwrapResults(label, settled) {
+function unwrapResults(label, settled, maxItems = LIMIT) {
+  const cap = Math.min(100, Math.max(1, Math.floor(Number(maxItems) || LIMIT)));
   if (settled.status === 'fulfilled') {
     const v = settled.value;
     if (v && Array.isArray(v.results)) {
-      return v.results.slice(0, LIMIT);
+      return v.results.slice(0, cap);
     }
     if (Array.isArray(v)) {
-      return v.slice(0, LIMIT);
+      return v.slice(0, cap);
     }
     return [];
   }
@@ -145,8 +148,9 @@ function unwrapResults(label, settled) {
   return [];
 }
 
-async function enrichTracks(rows) {
-  const slice = Array.isArray(rows) ? rows.slice(0, LIMIT) : [];
+async function enrichTracks(rows, maxSlice = LIMIT) {
+  const cap = Math.min(100, Math.max(1, Math.floor(Number(maxSlice) || LIMIT)));
+  const slice = Array.isArray(rows) ? rows.slice(0, cap) : [];
   if (slice.length === 0) {
     return [];
   }
@@ -260,14 +264,14 @@ async function ensureMissingTrackPreviews(rows) {
 
 async function fetchAndEnrichGlobalHomeDeezerPayload() {
   const settled = await Promise.allSettled([
-    deezer.getChartTracks(LIMIT, 0),
+    deezer.getChartTracks(DISCOVER_GLOBAL_TRACK_POOL, 0),
     deezer.getChartPlaylists(LIMIT),
     deezer.getChartArtists(LIMIT),
-    deezer.getEditorialNewReleasesAndNewTracks(LIMIT, LIMIT),
+    deezer.getEditorialNewReleasesAndNewTracks(LIMIT, DISCOVER_GLOBAL_TRACK_POOL),
     deezer.getPopularGenresForDiscoverCards(),
   ]);
 
-  const trendingRaw = unwrapResults('trending tracks', settled[0]);
+  const trendingRaw = unwrapResults('trending tracks', settled[0], DISCOVER_GLOBAL_TRACK_POOL);
   const playlists = unwrapResults('trending playlists', settled[1]);
   const artists = unwrapResults('popular artists', settled[2]);
   let newAlbums = [];
@@ -278,7 +282,7 @@ async function fetchAndEnrichGlobalHomeDeezerPayload() {
       newAlbums = v.albumResults.results.slice(0, LIMIT);
     }
     if (Array.isArray(v.newTrackRows)) {
-      newTracksRaw = v.newTrackRows.slice(0, LIMIT);
+      newTracksRaw = v.newTrackRows.slice(0, DISCOVER_GLOBAL_TRACK_POOL);
     }
   } else if (settled[3].status === 'rejected') {
     console.warn(
@@ -288,8 +292,8 @@ async function fetchAndEnrichGlobalHomeDeezerPayload() {
   }
 
   const [trendingEnriched, newTracksEnriched] = await Promise.all([
-    enrichTracks(trendingRaw),
-    enrichTracks(newTracksRaw),
+    enrichTracks(trendingRaw, DISCOVER_GLOBAL_TRACK_POOL),
+    enrichTracks(newTracksRaw, DISCOVER_GLOBAL_TRACK_POOL),
   ]);
 
   let genreCards = [];
@@ -375,29 +379,45 @@ async function getDiscoverHomeResponseForUser(userId) {
 
   const userRow = getUserDiscoverStmt.get(uid);
   let base;
-  if (userRow?.payload_json && cacheRowFresh(userRow.updated_at, ttl)) {
+  let globalPayload;
+  if (!userRow?.payload_json || !cacheRowFresh(userRow.updated_at, ttl)) {
+    const [rec, gp] = await Promise.all([
+      getOrRefreshDiscoverRecommendations(uid),
+      loadOrBuildGlobalHomePayload(),
+    ]);
+    globalPayload = gp;
+    base = buildPersonalizedHomePayloadForUser(uid, rec, globalPayload);
+    upsertUserDiscoverStmt.run(uid, JSON.stringify(base));
+  } else {
     try {
       base = JSON.parse(userRow.payload_json);
     } catch {
       base = null;
     }
+    if (!base) {
+      const [rec, gp] = await Promise.all([
+        getOrRefreshDiscoverRecommendations(uid),
+        loadOrBuildGlobalHomePayload(),
+      ]);
+      globalPayload = gp;
+      base = buildPersonalizedHomePayloadForUser(uid, rec, globalPayload);
+      upsertUserDiscoverStmt.run(uid, JSON.stringify(base));
+    } else {
+      globalPayload = await loadOrBuildGlobalHomePayload();
+    }
   }
 
-  if (!base) {
-    const [rec, globalPayload] = await Promise.all([
-      getOrRefreshDiscoverRecommendations(uid),
-      loadOrBuildGlobalHomePayload(),
-    ]);
-    base = buildPersonalizedHomePayloadForUser(uid, rec, globalPayload);
-    upsertUserDiscoverStmt.run(uid, JSON.stringify(base));
-  } else {
-    base = filterDiscoverHomePayloadForUser(uid, base);
-  }
+  base = {
+    ...base,
+    trendingTracks: Array.isArray(globalPayload.trendingTracks) ? globalPayload.trendingTracks : [],
+    newTracks: Array.isArray(globalPayload.newTracks) ? globalPayload.newTracks : [],
+  };
+  base = filterDiscoverHomePayloadForUser(uid, base);
 
   const recentRaw = getRecentlyAddedTracksForDiscover(LIMIT).slice(0, LIMIT);
-  const recRaw = Array.isArray(base.recommendedTracks) ? base.recommendedTracks : [];
-  const trendRaw = Array.isArray(base.trendingTracks) ? base.trendingTracks : [];
-  const newRaw = Array.isArray(base.newTracks) ? base.newTracks : [];
+  const recRaw = (Array.isArray(base.recommendedTracks) ? base.recommendedTracks : []).slice(0, LIMIT);
+  const trendRaw = (Array.isArray(base.trendingTracks) ? base.trendingTracks : []).slice(0, LIMIT);
+  const newRaw = (Array.isArray(base.newTracks) ? base.newTracks : []).slice(0, LIMIT);
 
   // DB-only enrich (request/library badges). Deezer GET /track/:id for previews/covers is done
   // on the client via POST /api/discover/track-previews so this handler stays fast on every visit.
@@ -424,9 +444,9 @@ function genreCacheKey(genreId) {
 async function fetchAndEnrichGlobalGenrePayload(gid) {
   const settled = await Promise.allSettled([
     deezer.getGenreById(gid),
-    deezer.getGenreTrendingTracksAndPopularArtistsFromChart(gid, LIMIT, LIMIT),
+    deezer.getGenreTrendingTracksAndPopularArtistsFromChart(gid, DISCOVER_GLOBAL_TRACK_POOL, LIMIT),
     deezer.getChartPlaylistsForGenre(gid, LIMIT),
-    deezer.getEditorialReleasesForGenreAndNewTracks(gid, LIMIT, LIMIT),
+    deezer.getEditorialReleasesForGenreAndNewTracks(gid, LIMIT, DISCOVER_GLOBAL_TRACK_POOL),
   ]);
 
   if (settled[0].status === 'rejected') {
@@ -438,7 +458,7 @@ async function fetchAndEnrichGlobalGenrePayload(gid) {
     settled[1].status === 'fulfilled' && settled[1].value ? settled[1].value : null;
   const trendingRaw =
     chartBundle?.trendingTracks?.results != null
-      ? chartBundle.trendingTracks.results.slice(0, LIMIT)
+      ? chartBundle.trendingTracks.results.slice(0, DISCOVER_GLOBAL_TRACK_POOL)
       : [];
   const artists =
     chartBundle?.popularArtists?.results != null
@@ -456,7 +476,7 @@ async function fetchAndEnrichGlobalGenrePayload(gid) {
       newAlbums = v.albumResults.results.slice(0, LIMIT);
     }
     if (Array.isArray(v.newTrackRows)) {
-      newTracksRaw = v.newTrackRows.slice(0, LIMIT);
+      newTracksRaw = v.newTrackRows.slice(0, DISCOVER_GLOBAL_TRACK_POOL);
     }
   } else if (settled[3].status === 'rejected') {
     console.warn(
@@ -476,8 +496,8 @@ async function fetchAndEnrichGlobalGenrePayload(gid) {
   }
 
   const [trendingEnriched, newTracksEnriched] = await Promise.all([
-    enrichTracks(trendingRaw),
-    enrichTracks(newTracksRaw),
+    enrichTracks(trendingRaw, DISCOVER_GLOBAL_TRACK_POOL),
+    enrichTracks(newTracksRaw, DISCOVER_GLOBAL_TRACK_POOL),
   ]);
 
   return {
@@ -580,8 +600,8 @@ async function getDiscoverGenreResponseForUser(userId, genreId) {
 
   const raw = await loadOrBuildGlobalGenrePayload(gid);
   const filtered = filterDiscoverGenrePayloadForUser(userId, raw);
-  const trendRaw = Array.isArray(filtered.trendingTracks) ? filtered.trendingTracks : [];
-  const newRaw = Array.isArray(filtered.newTracks) ? filtered.newTracks : [];
+  const trendRaw = (Array.isArray(filtered.trendingTracks) ? filtered.trendingTracks : []).slice(0, LIMIT);
+  const newRaw = (Array.isArray(filtered.newTracks) ? filtered.newTracks : []).slice(0, LIMIT);
   // DB-only enrich (badges). Previews/covers load on the client via POST /api/discover/track-previews
   // (same pattern as Discover home) so genre pages stay fast when global cache is warm.
   const [trendingTracks, newTracks] = await Promise.all([

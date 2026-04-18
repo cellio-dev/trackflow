@@ -11,7 +11,7 @@ const { findPresentTrackForProbe } = require('../services/tracksDb');
 const { enrichRequestRow } = require('../services/requestDisplayStatus');
 const { usernamesByIds, usernameForId } = require('../services/userDisplay');
 const { recordFollowResolution } = require('../services/followRequestHistory');
-const { addBlockedTrackFromRequestRow } = require('../services/blockedTracks');
+const { addBlockedTrackFromRequestRow, removeBlockedTracksMatchingRequestProbe } = require('../services/blockedTracks');
 
 const router = express.Router();
 const db = getDb();
@@ -62,6 +62,25 @@ router.get('/', async (req, res) => {
   res.json({
     message: 'Placeholder: GET /api/admin',
   });
+});
+
+// GET /api/admin/requests/:id — single row (e.g. manual import from needs-attention)
+router.get('/requests/:id', async (req, res) => {
+  const requestId = Number(req.params.id);
+  if (!Number.isInteger(requestId) || requestId <= 0) {
+    return res.status(400).json({ error: 'Invalid request id' });
+  }
+  try {
+    const existing = getRequestByIdStmt.get(requestId);
+    if (!existing) {
+      return res.status(404).json({ error: 'Request not found' });
+    }
+    const withLib = await enrichRequestRowWithLibraryMatch(existing);
+    return res.json(enrichRequestRow(withLib));
+  } catch (error) {
+    console.error('Failed to load request:', error.message);
+    return res.status(500).json({ error: 'Failed to load request' });
+  }
 });
 
 // POST /api/admin/requests/:id/approve
@@ -191,6 +210,9 @@ router.delete('/requests/:id', (req, res) => {
       return res.status(404).json({ error: 'Request not found' });
     }
 
+    if (String(existing.status || '') === 'denied') {
+      removeBlockedTracksMatchingRequestProbe(existing);
+    }
     deleteRequestStmt.run(requestId);
     return res.status(204).send();
   } catch (error) {
