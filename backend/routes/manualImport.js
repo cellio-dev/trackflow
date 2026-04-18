@@ -3,6 +3,7 @@ const multer = require('multer');
 const path = require('path');
 const crypto = require('crypto');
 const manualImport = require('../services/manualImport');
+const deezer = require('../services/deezer');
 const runtimeConfig = require('../services/runtimeConfig');
 
 const router = express.Router();
@@ -83,16 +84,69 @@ router.post('/manual-import/analyze', (req, res, next) => {
 
 const jsonParser = express.json({ limit: '32kb' });
 
-router.post('/manual-import/confirm', jsonParser, async (req, res) => {
-  const uploadToken = req.body?.uploadToken;
-  const deezerId = req.body?.deezerId ?? req.body?.deezer_id;
+router.get('/manual-import/deezer-lookup/:id', async (req, res) => {
+  const id = String(req.params.id || '').trim();
+  if (!id) {
+    return res.status(400).json({ error: 'Deezer track id is required' });
+  }
   try {
-    const result = await manualImport.confirmImport(uploadToken, deezerId);
-    return res.json({ ok: true, ...result });
+    const data = await deezer.fetchDeezerJson(`https://api.deezer.com/track/${encodeURIComponent(id)}`);
+    if (data?.error) {
+      return res.status(404).json({ error: data.error.message || 'Track not found' });
+    }
+    return res.json({
+      id: data.id,
+      title: data.title || '',
+      artist: data.artist?.name || '',
+      album: data.album?.title || null,
+    });
+  } catch (e) {
+    console.error('[manualImport] deezer lookup failed:', e?.message || e);
+    return res.status(500).json({ error: e?.message || 'Lookup failed' });
+  }
+});
+
+router.post('/manual-import/youtube', jsonParser, async (req, res) => {
+  const url = req.body?.url ?? req.body?.youtubeUrl;
+  try {
+    const out = await manualImport.importYoutubeAudioForManualImport(url);
+    return res.json(out);
   } catch (e) {
     const msg = e?.message || String(e);
     const isClient =
-      /required|expired|invalid|not found|missing/i.test(msg) || msg.includes('Deezer');
+      /required|allowed|youtube|yt-dlp|timed out|not found|unsupported/i.test(msg) ||
+      msg.includes('Only http');
+    console.error('[manualImport] youtube failed:', msg);
+    return res.status(isClient ? 400 : 500).json({ error: msg });
+  }
+});
+
+router.post('/manual-import/confirm', jsonParser, async (req, res) => {
+  const uploadToken = req.body?.uploadToken;
+  const deezerId = req.body?.deezerId ?? req.body?.deezer_id;
+  const acknowledgeDuplicate = Boolean(req.body?.acknowledgeDuplicate);
+  const libraryDuplicateAction = req.body?.libraryDuplicateAction ?? req.body?.library_duplicate_action;
+  const requestId = req.body?.requestId ?? req.body?.request_id;
+  try {
+    const result = await manualImport.confirmImport(uploadToken, deezerId, {
+      acknowledgeDuplicate,
+      libraryDuplicateAction,
+      requestId,
+    });
+    return res.json({ ok: true, ...result });
+  } catch (e) {
+    const msg = e?.message || String(e);
+    if (e && e.code === 'DUPLICATE') {
+      return res.status(409).json({
+        error: msg,
+        code: 'DUPLICATE',
+        matches: Array.isArray(e.matches) ? e.matches : [],
+        actions: ['add_copy', 'overwrite'],
+      });
+    }
+    const isClient =
+      /required|expired|invalid|not found|missing|does not match|not in a state/i.test(msg) ||
+      msg.includes('Deezer');
     console.error('[manualImport] confirm failed:', msg);
     return res.status(isClient ? 400 : 500).json({ error: msg });
   }

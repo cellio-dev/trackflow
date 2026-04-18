@@ -29,6 +29,7 @@ const {
   deleteBlockedTrackById,
   clearBlockedTracks,
   isTrackBlocked,
+  removeBlockedTracksMatchingRequestProbe,
 } = require('../services/blockedTracks');
 const { requireAdmin, sessionUserIdString } = require('../middleware/auth');
 
@@ -73,6 +74,17 @@ function userMayDeleteRequestViaUserApi(row) {
     return true;
   }
   return false;
+}
+
+/** Admin-only: clear failed rows that still show Retry/Deny (needs attention, not user-cancelled). */
+function adminMayDeleteFailedNeedsAttentionRow(row) {
+  if (!row) {
+    return false;
+  }
+  if (String(row.status || '') !== 'failed') {
+    return false;
+  }
+  return Number(row.cancelled) !== 1;
 }
 
 const listRequestsStmt = db.prepare(`
@@ -416,8 +428,14 @@ router.delete('/:id', (req, res) => {
       if (!userMayDeleteRequestViaUserApi(existing)) {
         return res.status(403).json({ error: 'Forbidden' });
       }
-    } else if (!userMayDeleteRequestViaUserApi(existing)) {
+    } else if (
+      !userMayDeleteRequestViaUserApi(existing) &&
+      !adminMayDeleteFailedNeedsAttentionRow(existing)
+    ) {
       return res.status(400).json({ error: 'This request cannot be removed here' });
+    }
+    if (String(existing.status || '') === 'denied') {
+      removeBlockedTracksMatchingRequestProbe(existing);
     }
     deleteRequestByIdStmt.run(requestId);
     return res.status(204).send();

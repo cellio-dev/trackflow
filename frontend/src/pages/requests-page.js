@@ -351,6 +351,24 @@ function trackRowMayClear(request) {
   return false;
 }
 
+function appendManualImportButton(actionsTd, request) {
+  const importBtn = document.createElement('button');
+  importBtn.type = 'button';
+  importBtn.textContent = 'Import';
+  importBtn.addEventListener('click', () => {
+    const did = request.deezer_id != null ? String(request.deezer_id).trim() : '';
+    if (!did) {
+      window.alert('This request has no Deezer id.');
+      return;
+    }
+    window.location.assign(
+      `/manual-import.html?requestId=${encodeURIComponent(String(request.id))}&deezerId=${encodeURIComponent(did)}`,
+    );
+  });
+  actionsTd.appendChild(importBtn);
+  actionsTd.appendChild(document.createTextNode(' '));
+}
+
 function appendTrackClearButton(actionsTd, request) {
   const clearBtn = document.createElement('button');
   clearBtn.type = 'button';
@@ -398,6 +416,7 @@ function renderTrackActionsCell(request) {
     }
     if (status === 'processing') {
       if (Number(request.cancelled) === 1) {
+        appendManualImportButton(actionsTd, request);
         appendTrackClearButton(actionsTd, request);
         return actionsTd;
       }
@@ -412,6 +431,7 @@ function renderTrackActionsCell(request) {
       return actionsTd;
     }
     if (status === 'failed' && Number(request.cancelled) !== 1) {
+      appendManualImportButton(actionsTd, request);
       const retryBtn = document.createElement('button');
       retryBtn.type = 'button';
       retryBtn.textContent = 'Retry';
@@ -429,9 +449,17 @@ function renderTrackActionsCell(request) {
       actionsTd.appendChild(retryBtn);
       actionsTd.appendChild(document.createTextNode(' '));
       actionsTd.appendChild(denyBtn);
+      actionsTd.appendChild(document.createTextNode(' '));
+      appendTrackClearButton(actionsTd, request);
       return actionsTd;
     }
     if (trackRowMayClear(request)) {
+      if (isAdmin && normalizeTrackFilterToken(request) === 'needs_attention') {
+        const did = request.deezer_id != null ? String(request.deezer_id).trim() : '';
+        if (did) {
+          appendManualImportButton(actionsTd, request);
+        }
+      }
       appendTrackClearButton(actionsTd, request);
     }
     return actionsTd;

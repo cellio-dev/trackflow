@@ -88,6 +88,34 @@ function resolveUniqueLibraryRelativePath(libraryRoot, relativePath) {
   return { destPath: candidate, parentDir };
 }
 
+/**
+ * Canonical library path for pattern-based naming (no " (1)" suffix). Used for manual import overwrite.
+ * @returns {{ destPath: string, parentDir: string }}
+ */
+function resolveCanonicalLibraryRelativePath(libraryRoot, relativePath) {
+  const parts = String(relativePath)
+    .split(path.sep)
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0);
+  if (parts.length === 0) {
+    throw new Error('Invalid library relative path');
+  }
+  for (const p of parts) {
+    if (p === '..' || p === '.') {
+      throw new Error('Invalid path segment in library path');
+    }
+  }
+  const fileName = parts[parts.length - 1];
+  const dirParts = parts.slice(0, -1);
+  let parentDir = path.resolve(libraryRoot);
+  for (const d of dirParts) {
+    parentDir = path.join(parentDir, d);
+  }
+  const candidate = path.join(parentDir, fileName);
+  assertDestInsideLibraryRoot(libraryRoot, candidate);
+  return { destPath: candidate, parentDir };
+}
+
 function pathExistsWithNumberedVariants(fullPath) {
   if (fs.existsSync(fullPath)) {
     return true;
@@ -308,9 +336,10 @@ function resolveLocalPathAfterDownload(match, remoteFilename, _artist, _title) {
 /**
  * Move completed download from slskd into LIBRARY_PATH using `file_naming_pattern`.
  * @param {object} [tagMeta] — optional { deezer_id, album, duration_seconds, year?, track_number? } for mutagen + naming
+ * @param {{ keepSourceFile?: boolean, destinationMode?: 'unique'|'overwrite' }} [transportOpts] — if keepSourceFile, copy into library and leave source path on disk; overwrite replaces the canonical patterned file if present
  * @returns {Promise<string>} final absolute path
  */
-async function moveCompletedDownloadToLibrary(sourcePath, artist, title, tagMeta = null) {
+async function moveCompletedDownloadToLibrary(sourcePath, artist, title, tagMeta = null, transportOpts = null) {
   const libraryRoot = getLibraryPath();
   if (!libraryRoot) {
     throw new Error(
@@ -340,17 +369,54 @@ async function moveCompletedDownloadToLibrary(sourcePath, artist, title, tagMeta
   const { relativePath } = buildLibraryRelativePath(pattern, meta, ext);
   const libraryDir = path.resolve(libraryRoot);
 
-  const { destPath, parentDir } = resolveUniqueLibraryRelativePath(libraryDir, relativePath);
+  const opts = transportOpts && typeof transportOpts === 'object' ? transportOpts : {};
+  const keepSourceFile = Boolean(opts.keepSourceFile);
+  const destinationMode = opts.destinationMode === 'overwrite' ? 'overwrite' : 'unique';
+
+  const { destPath, parentDir } =
+    destinationMode === 'overwrite'
+      ? resolveCanonicalLibraryRelativePath(libraryDir, relativePath)
+      : resolveUniqueLibraryRelativePath(libraryDir, relativePath);
   await fs.promises.mkdir(parentDir, { recursive: true });
 
-  try {
-    await fs.promises.rename(resolvedSource, destPath);
-  } catch (err) {
-    if (err && err.code === 'EXDEV') {
-      await fs.promises.copyFile(resolvedSource, destPath);
-      await fs.promises.unlink(resolvedSource);
+  if (destinationMode === 'overwrite' && fs.existsSync(destPath)) {
+    const st = await fs.promises.stat(destPath);
+    if (st.isFile()) {
+      await fs.promises.unlink(destPath);
     } else {
-      throw err;
+      throw new Error('Library destination exists and is not a file; cannot overwrite');
+    }
+  }
+
+  if (keepSourceFile) {
+    await fs.promises.copyFile(resolvedSource, destPath);
+  } else {
+    try {
+      await fs.promises.rename(resolvedSource, destPath);
+    } catch (err) {
+      if (err && err.code === 'EXDEV') {
+        await fs.promises.copyFile(resolvedSource, destPath);
+        await fs.promises.unlink(resolvedSource);
+      } else {
+        throw err;
+      }
+    }
+  }
+
+  if (!keepSourceFile) {
+    const srcAbs = path.resolve(resolvedSource);
+    const dstAbs = path.resolve(destPath);
+    if (srcAbs !== dstAbs) {
+      try {
+        if (fs.existsSync(srcAbs)) {
+          const st = await fs.promises.stat(srcAbs);
+          if (st.isFile()) {
+            await fs.promises.unlink(srcAbs);
+          }
+        }
+      } catch (e) {
+        console.warn('[libraryMove] leftover source after move (removed):', srcAbs, e?.message || e);
+      }
     }
   }
 
@@ -499,6 +565,7 @@ module.exports = {
   extractCompletedDownloadLocalPath,
   findFile,
   resolveLocalPathAfterDownload,
+  resolveCanonicalLibraryRelativePath,
   moveCompletedDownloadToLibrary,
   tryRemovePartialDownloadAndEmptyParent,
   sanitizeFilenamePart,

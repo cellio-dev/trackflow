@@ -8,8 +8,16 @@ COPY frontend/ ./
 RUN npm run build
 
 FROM node:22-bookworm-slim AS runtime
+# python3 + mutagen for tagging; ffmpeg for yt-dlp audio extract; yt-dlp for manual YouTube import
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends python3 python3-mutagen \
+  && apt-get install -y --no-install-recommends \
+    python3 \
+    python3-mutagen \
+    curl \
+    ca-certificates \
+    ffmpeg \
+  && curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp \
+  && chmod a+rx /usr/local/bin/yt-dlp \
   && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 ENV NODE_ENV=production

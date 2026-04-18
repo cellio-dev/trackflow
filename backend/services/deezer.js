@@ -127,10 +127,11 @@ function mapTrack(track, fallback = {}) {
   };
 }
 
-function simplifyTracks(tracks) {
+function simplifyTracks(tracks, maxResults = 20) {
   const safeTracks = Array.isArray(tracks) ? tracks : [];
+  const cap = Math.min(100, Math.max(1, Math.floor(Number(maxResults) || 20)));
 
-  const results = safeTracks.slice(0, 20).map((track) => ({
+  const results = safeTracks.slice(0, cap).map((track) => ({
     ...mapTrack(track),
     type: 'track',
   }));
@@ -342,7 +343,7 @@ async function getArtistTopTracks(artistId) {
   const url = `https://api.deezer.com/artist/${encodedArtistId}/top?limit=${ARTIST_TOP_TRACKS_LIMIT}`;
 
   const data = await fetchDeezerJson(url);
-  return simplifyTracks(data.data);
+  return simplifyTracks(data.data, ARTIST_TOP_TRACKS_LIMIT);
 }
 
 /**
@@ -448,7 +449,7 @@ async function getChartTracks(limit = 20, index = 0) {
 
   const data = await fetchDeezerJson(url);
 
-  return simplifyTracks(data.data);
+  return simplifyTracks(data.data, lim);
 }
 
 async function getChartPlaylists(limit = 20) {
@@ -555,7 +556,7 @@ async function getChartTracksForGenre(genreId, limit = 20, index = 0) {
 
   const data = await fetchDeezerJson(url);
 
-  return simplifyTracks(data.data);
+  return simplifyTracks(data.data, lim);
 }
 
 /**
@@ -609,7 +610,7 @@ async function getGenreTrendingTracksAndPopularArtistsFromChart(
 
   const raw = Array.isArray(data.data) ? data.data : [];
   return {
-    trendingTracks: simplifyTracks(raw),
+    trendingTracks: simplifyTracks(raw, fetchLimit),
     popularArtists: popularArtistsFromGenreChartTrackRows(raw, al),
   };
 }

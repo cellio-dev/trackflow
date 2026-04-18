@@ -161,6 +161,39 @@
         margin-top: 6px;
         word-break: break-all;
       }
+      .mi-dup-dialog {
+        position: fixed;
+        inset: 0;
+        z-index: 80;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        background: rgba(0, 0, 0, 0.55);
+      }
+      .mi-dup-dialog[hidden] {
+        display: none !important;
+      }
+      .mi-dup-dialog__panel {
+        max-width: 440px;
+        width: 100%;
+        padding: 18px;
+        border-radius: 10px;
+        border: 1px solid var(--tf-border, #27272a);
+        background: var(--tf-surface, #18181b);
+      }
+      .mi-dup-list {
+        margin: 0;
+        padding-left: 18px;
+        font-size: 0.88rem;
+        line-height: 1.45;
+      }
+      .mi-dup-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 4px;
+      }
     </style>
   </head>
   <body>
@@ -174,16 +207,30 @@
           </div>
           <h1>Manual import</h1>
           <p class="mi-lead">
-            Choose an audio file, match it to a Deezer track, then import into your library with the same tagging, naming, and
-            database steps as after a download.
+            Upload an audio file or paste a YouTube link, match the result to a Deezer track, then import into your library.
           </p>
 
           <div class="mi-section">
-            <h2>1. Audio file</h2>
+            <h2>1. Audio source</h2>
+            <p class="mi-meta" style="margin: 0 0 10px; color: var(--tf-muted, #a1a1aa)">Choose one:</p>
+            <label class="mi-label" for="miFile">Audio file</label>
             <input id="miFile" type="file" accept=".mp3,.flac,.m4a,.aac,.ogg,.opus,.wav,.wma,.aif,.aiff,audio/*" />
             <p id="miFileHint" class="mi-filename" hidden></p>
             <div class="mi-row">
               <button type="button" class="mi-btn" id="miAnalyzeBtn" disabled>Analyze file</button>
+            </div>
+            <p class="mi-meta" style="margin: 14px 0 6px; color: var(--tf-muted, #a1a1aa)">or</p>
+            <label class="mi-label" for="miYoutubeUrl">YouTube / YouTube Music URL</label>
+            <div class="mi-search-row">
+              <input
+                id="miYoutubeUrl"
+                type="url"
+                inputmode="url"
+                placeholder="https://www.youtube.com/watch?v=…"
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <button type="button" class="mi-btn" id="miYoutubeBtn">Download &amp; analyze</button>
             </div>
           </div>
 
@@ -201,7 +248,7 @@
             <h2>3. Summary</h2>
             <div class="mi-grid">
               <div>
-                <h3 class="mi-label" style="margin-bottom: 8px">File (current tags)</h3>
+                <h3 class="mi-label" style="margin-bottom: 8px">Source (current tags)</h3>
                 <dl class="mi-meta" id="miFileSummary"></dl>
               </div>
               <div>
@@ -209,12 +256,29 @@
                 <dl class="mi-meta" id="miDeezerSummary"></dl>
               </div>
             </div>
+            <p id="miRequestHint" class="mi-filename" hidden style="margin-top: 14px"></p>
             <div class="mi-row" style="margin-top: 16px">
               <button type="button" class="mi-btn mi-btn--primary" id="miConfirmBtn" disabled>Import into library</button>
             </div>
           </div>
 
           <p id="miMessage" class="mi-msg" hidden role="status"></p>
+
+          <div class="mi-dup-dialog" id="miDupDialog" hidden role="dialog" aria-modal="true" aria-labelledby="miDupTitle">
+            <div class="mi-dup-dialog__panel">
+              <h3 id="miDupTitle" class="mi-label" style="margin-top: 0">Library match</h3>
+              <p class="mi-meta" style="margin: 0 0 8px; color: var(--tf-muted, #a1a1aa)">
+                A similar track is already in your library:
+              </p>
+              <ul id="miDupList" class="mi-dup-list"></ul>
+              <p class="mi-meta" style="margin: 10px 0 12px; color: var(--tf-muted, #a1a1aa)">What should we do?</p>
+              <div class="mi-dup-actions">
+                <button type="button" class="mi-btn mi-btn--primary" id="miDupAddCopy">Add another copy</button>
+                <button type="button" class="mi-btn" id="miDupOverwrite">Overwrite</button>
+                <button type="button" class="mi-btn" id="miDupCancel">Cancel</button>
+              </div>
+            </div>
+          </div>
         </div>
       </main>
     </div>
